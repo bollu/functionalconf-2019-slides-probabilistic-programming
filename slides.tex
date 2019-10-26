@@ -3,6 +3,7 @@
 \usepackage[english]{babel}
 \usepackage{minted}
 \usepackage{comment}
+%https://tex.stackexchange.com/questions/365292/how-to-use-non-ascii-chars/365303#365303
 \usepackage{pmboxdraw}
 
 \newenvironment{code}{\VerbatimEnvironment \begin{minted}{haskell}}{\end{minted}}
@@ -42,8 +43,40 @@ import qualified Data.Map as M
 \end{code}
 \end{comment}
 
-A motivating example:
 
+\title{My Presentation}
+\author{Siddharth Bhat}
+\institute{IIIT Hyderabad}
+\date{\today}
+
+
+
+\begin{frame}[fragile]{Motivation}
+
+
+\begin{code}
+tossDice :: PL Int
+tossDice = do
+    d1 <- dice
+    d2 <- dice
+    return $ d1 + d2
+\end{code}
+
+\input{"| cabal v2-exec slides -- tossDice"}
+
+\begin{code}
+tossDicePrime :: PL [Int]
+tossDicePrime = weighted $ do
+    d <- tossDice
+    score $ if prime d then 1 else 0
+    return $ d
+\end{code}
+\input{"| cabal v2-exec slides -- tossDicePrime"}
+  
+\end{frame}
+
+
+\begin{comment}
 
 \begin{code}
 predictCoinBias :: [Int] -> PL [Float]
@@ -54,18 +87,6 @@ predictCoinBias flips = weighted $ do
   return $ b
 \end{code}
 
-\begin{ascii}
-█▇▆▇▇▇▆▇▇▆_
-\end{ascii}
-
-
-\begin{verbatim}
-█▇▆▇▇▇▆▇▇▆_
-\end{verbatim}
-\input{|"cabal v2-exec slides -- predictUnbiased"}
-
-
-\begin{comment}
 \begin{code}
 
 compose :: Int -> (a -> a) -> (a -> a)
@@ -76,23 +97,19 @@ compose n f = f . compose (n - 1) f
 
 -- | List of characters that represent sparklines
 sparkchars :: String
-sparkchars = "_▁▂▃▄▅▆▇█"
+sparkchars = "▁▂▃▄▅▆▇█"
 
 -- Convert an int to a sparkline character
-num2spark :: RealFrac a => a -- ^ Max value
+num2spark :: Show a => RealFrac a => a -- ^ Max value
   -> a -- ^ Current value
   -> Char
 num2spark maxv curv =
-   sparkchars !!
-     (floor $ (curv / maxv) * (fromIntegral (length sparkchars - 1)))
+  if curv > maxv
+  then error  $ "curv" <> (show curv) <> ">" <> "maxv" <> (show maxv)
+  else sparkchars !! (floor $ (curv / maxv) * (fromIntegral (length sparkchars - 1)))
 
-series2spark :: RealFrac a => [a] -> String
-series2spark vs =
-  let maxv = if null vs then 0 else maximum vs
-  in map (num2spark maxv) vs
-
-seriesPrintSpark :: RealFrac a => [a] -> IO ()
-seriesPrintSpark = putStrLn . series2spark
+series2spark :: Show a => RealFrac a => a -> [a] -> String
+series2spark maxv vs = map (num2spark maxv) vs
 
 -- Probabilites
 -- ============
@@ -332,31 +349,31 @@ dice = choose [1, 2, 3, 4, 5, 6]
 
 -- | Create a histogram from values.
 histogram :: Int -- ^ number of buckets
+          -> Float
+          -> Float
           -> [Float] -- values
           -> [Int]
-histogram nbuckets as =
+histogram nbuckets minv maxv as =
     let
-        minv :: Float
-        minv = minimum as
-        maxv :: Float
-        maxv = maximum as
-        -- value per bucket
-        perbucket :: Float
         perbucket = (maxv - minv) / (fromIntegral nbuckets)
-        bucket :: Float -> Int
         bucket v = floor $ (v - minv) / perbucket
+        startBuckets :: M.Map Int Int
+        startBuckets = M.fromList $ [(i, 0) | i <- [bucket minv..bucket maxv]]
         bucketed :: M.Map Int Int
-        bucketed = foldl (\m v -> M.insertWith (+) (bucket v) 1 m) mempty as
+        bucketed = foldl (\m v -> M.insertWith (+) (bucket v) 1 m) startBuckets as
      in map snd . M.toList $ bucketed
 
 
-printSamples :: (Real a, Eq a, Ord a, Show a) => String -> [a] -> IO ()
-printSamples s as =  do
-    putStrLn $ "***" <> s
-    putStrLn $ "   samples: " <> series2spark (map toRational as)
+-- printSamples :: (Real a, Eq a, Ord a, Show a) => String -> a -> [a] -> IO ()
+-- printSamples s maxv as =  do
+--     putStrLn $ "***" <> s
+--     putStrLn $ "   samples: " <> series2spark maxv (map toRational as)
 
-printHistogam :: [Float] -> IO ()
-printHistogam samples = putStrLn $ series2spark (map fromIntegral . histogram 10 $  samples)
+
+printHistogram :: Int -> Float -> Float -> [Float] -> IO ()
+printHistogram nbuckets minv maxv samples =
+  let histValues = (map fromIntegral . histogram nbuckets minv maxv $  samples) :: [Float]
+  in putStrLn $ series2spark (maximum histValues) histValues
 
 
 -- | Given a coin bias, take samples and print bias
@@ -364,7 +381,8 @@ printCoin :: Float -> IO ()
 printCoin bias = do
     let g = mkStdGen 1
     let (tosses, _) = samples 100 g (coin bias)
-    printSamples ("bias: " <> show bias) tosses
+    error $ "unimplemented"
+    -- printSamples ("bias: " <> show bias) tosses
 
 
 -- | Create normal distribution as sum of uniform distributions.
@@ -727,16 +745,31 @@ latexWrapper printer = do
     putStrLn ""
     putStrLn "\\end{ascii}"
 
+divisors :: Int -> [Int]
+divisors n = [i | i <- [1..n-1], n `mod` i == 0]
+
+prime :: Int -> Bool
+prime 1 = False
+prime p = length (divisors p) == 1
+
 main :: IO ()
 main = do
     let g = mkStdGen 1
     args <- getArgs
     case args !! 0  of
-        "predictUnbiased" -> do 
+        "tossDice" -> do
+          let (samples, _) = sample g (replicateM  2000 tossDice)
+          latexWrapper $ print $ take 10 samples
+          latexWrapper $ printHistogram 10 2 12 $ (map fromIntegral samples)
+          
+        "tossDicePrime" -> do
+          let (samples, _) = sample g tossDicePrime
+          latexWrapper $ print $ take 10 $ samples
+          latexWrapper $ printHistogram 10 2 12 $ take 2000 $ (map fromIntegral samples)
+          
+        "egSampleDiceNoCondition" -> do 
             let (mcmcsamples, _) = sample g (predictCoinBias [])
-            -- latexWrapper $ printHistogam $ take 2000 $ mcmcsamples
-            -- latexWrapper $ printHistogam $ take 2000 $ mcmcsamples
-            latexWrapper $ putStr "█▇▆▇▇▇▆▇▇▆_"
+            latexWrapper $ printHistogram 36 2 36 $ take 2000 $ mcmcsamples
 
 
         "bar" -> putStrLn $ "bar"
@@ -764,53 +797,53 @@ main = do
     -- putStrLn $ "normal distribution using central limit theorem: "
     -- let (nsamples, _) = samples 1000 g normal
     -- -- printSamples "normal: " nsamples
-    -- printHistogam $  nsamples
+    -- printHistogram $  nsamples
 
 
     -- putStrLn $ "normal distribution using MCMC: "
     -- let (mcmcsamples, _) = sample g (weighted $ d2pl (-10, 10) $ normalD 0.5)
-    -- printHistogam $ take 10000 $  mcmcsamples
+    -- printHistogram $ take 10000 $  mcmcsamples
 
     -- putStrLn $ "sampling from x^4 with finite support"
     -- let (mcmcsamples, _) = sample g (weighted $ d2pl (0, 5)$  \x -> x ** 2)
-    -- printHistogam $ take 1000  mcmcsamples
+    -- printHistogram $ take 1000  mcmcsamples
 
 
     -- putStrLn $ "sampling from |sin(x)| with finite support"
     -- let (mcmcsamples, _) = sample g (weighted $ d2pl (0, 6)$  \x -> abs (sin x))
-    -- printHistogam $ take 10000 mcmcsamples
+    -- printHistogram $ take 10000 mcmcsamples
 
 
     -- putStrLn $ "bias distribution with supplied with []"
     -- let (mcmcsamples, _) = sample g (predictCoinBias [])
-    -- printHistogam $ take 1000 $ mcmcsamples
+    -- printHistogram $ take 1000 $ mcmcsamples
 
     -- putStrLn $ "bias distribution with supplied with [True]"
     -- let (mcmcsamples, _) = sample g (predictCoinBias [1, 1])
-    -- printHistogam $ take 1000 $ mcmcsamples
+    -- printHistogram $ take 1000 $ mcmcsamples
 
 
     -- putStrLn $ "bias distribution with supplied with [0] x 10"
     -- let (mcmcsamples, _) = sample g (predictCoinBias (replicate 10 0))
-    -- printHistogam $ take 100 $ mcmcsamples
+    -- printHistogram $ take 100 $ mcmcsamples
 
     -- putStrLn $ "bias distribution with supplied with [1] x 2"
     -- let (mcmcsamples, _) = sample g (predictCoinBias (replicate 2 1))
-    -- printHistogam $ take 100 $ mcmcsamples
+    -- printHistogram $ take 100 $ mcmcsamples
 
     -- putStrLn $ "bias distribution with supplied with [1] x 30"
     -- let (mcmcsamples, _) = sample g (predictCoinBias (replicate 30 1))
-    -- printHistogam $ take 100 $ mcmcsamples
+    -- printHistogram $ take 100 $ mcmcsamples
 
 
     -- putStrLn $ "bias distribution with supplied with [0, 1]"
     -- let (mcmcsamples, _) = sample g (predictCoinBias (mconcat $ replicate 10 [0, 1]))
-    -- printHistogam $ take 100 $ mcmcsamples
+    -- printHistogram $ take 100 $ mcmcsamples
 
 
     -- putStrLn $ "bias distribution with supplied with [1, 0]"
     -- let (mcmcsamples, _) = sample g (predictCoinBias (mconcat $ replicate 20 [1, 0]))
-    -- printHistogam $ take 100 $ mcmcsamples
+    -- printHistogram $ take 100 $ mcmcsamples
 
 \end{code}
 
