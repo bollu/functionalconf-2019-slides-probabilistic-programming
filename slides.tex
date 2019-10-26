@@ -55,7 +55,7 @@ import qualified Data.Map as M
 
 
 \begin{code}
-tossDice :: PL Int
+tossDice :: Rand Int
 tossDice = do
     d1 <- dice
     d2 <- dice
@@ -65,21 +65,53 @@ tossDice = do
 \input{"| cabal v2-exec slides -- tossDice"}
 
 \begin{code}
-tossDicePrime :: PL [Int]
+tossDicePrime :: Rand [Int]
 tossDicePrime = weighted $ do
     d <- tossDice
     score $ if prime d then 1 else 0
     return $ d
 \end{code}
+
+
 \input{"| cabal v2-exec slides -- tossDicePrime"}
   
 \end{frame}
+
+\begin{frame}[fragile]
+
+{\scriptsize \small
+\begin{code}
+
+data Rand x where
+    Ret :: x -> Rand x
+    Sample01 :: (Float -> Rand x) -> Rand x
+    Score :: Float -> Rand x -> Rand x
+    Ap :: Rand (a -> x) -> Rand a -> Rand x
+instance Functor Rand where
+  fmap f (Ret x) = Ret (f x)
+  fmap f (Sample01 r2mx) = Sample01 (\r -> fmap f (r2mx r))
+  fmap f (Score s mx) = Score s (fmap f mx)
+  fmap f (Ap m2x ma) = Ap ((f .) <$> m2x) ma
+instance Applicative Rand where
+  pure = Ret
+  pa2b <*> pa = Ap pa2b pa
+instance Monad Rand where
+  return = Ret
+  (Ret x) >>= x2my = x2my x
+  (Sample01 r2mx) >>= x2my = Sample01 (\r -> r2mx r >>= x2my)
+  (Score s mx) >>= x2my = Score s (mx >>= x2my)
+  (Ap m2x ma) >>= x2my =
+    m2x >>= \a2x -> ma >>= \a -> x2my (a2x a)
+\end{code}
+}
+\end{frame}
+   
 
 
 \begin{comment}
 
 \begin{code}
-predictCoinBias :: [Int] -> PL [Float]
+predictCoinBias :: [Int] -> Rand [Float]
 predictCoinBias flips = weighted $ do
   b <- sample01
   forM_ flips $ \f -> do
@@ -156,44 +188,19 @@ scoreTrace f Trace{..} = Trace{tscore = tscore * f, ..}
 prependRandomnessTrace :: Float -> Trace a -> Trace a
 prependRandomnessTrace r Trace{..} = Trace { trs = r:trs, ..}
 
-data PL x where
-    Ret :: x -> PL x
-    Sample01 :: (Float -> PL x) -> PL x
-    Score :: Float -> PL x -> PL x
-    Ap :: PL (a -> x) -> PL a -> PL x
-
-instance Functor PL where
-  fmap f (Ret x) = Ret (f x)
-  fmap f (Sample01 r2plx) = Sample01 (\r -> fmap f (r2plx r))
-  fmap f (Score s plx) = Score s (fmap f plx)
-  fmap f (Ap pla2x pla) = Ap ((f .) <$> pla2x) pla
-
-
-instance Applicative PL where
-  pure = Ret
-  pa2b <*> pa = Ap pa2b pa
-
-
-instance Monad PL where
-  return = Ret
-  (Ret x) >>= x2ply = x2ply x
-  (Sample01 r2plx) >>= x2ply = Sample01 (\r -> r2plx r >>= x2ply)
-  (Score s plx) >>= x2ply = Score s (plx >>= x2ply)
-  (Ap pla2x pla) >>= x2ply = pla2x >>= \a2x -> pla >>= \a -> x2ply (a2x a)
-
 -- | operation to sample from [0, 1)
-sample01 :: PL Float
+sample01 :: Rand Float
 sample01 = Sample01 Ret
 
-score :: Float -> PL ()
+score :: Float -> Rand ()
 score s = Score s (Ret ())
 
-condition :: Bool -> PL ()
+condition :: Bool -> Rand ()
 condition True = score 1
 condition False = score 0
 
--- | convert a distribution into a PL
-d2pl :: (Float, Float) -> D Float -> PL Float
+-- | convert a distribution into a Rand
+d2pl :: (Float, Float) -> D Float -> Rand Float
 d2pl (lo, hi) d = do
   u <- sample01
   let a = lo + u * (hi - lo)
@@ -201,7 +208,7 @@ d2pl (lo, hi) d = do
   return $ a
 
 -- | A way to choose uniformly. Maybe slightly biased due to an off-by-one ;)
-choose :: [a] -> PL a
+choose :: [a] -> Rand a
 choose as = do
     let l = length as
     u <- sample01
@@ -231,24 +238,24 @@ instance MCMC Int where
 
 -- | lift a regular computation into the Trace world, where we know what
 -- decisions were taken.
-reifyTrace :: PL x -> PL (Trace x)
+reifyTrace :: Rand x -> Rand (Trace x)
 reifyTrace (Ret x) = Ret (mkTrace x)
-reifyTrace (Sample01 plx) = do
+reifyTrace (Sample01 mx) = do
   r <- sample01
-  trx <- reifyTrace $ plx r
+  trx <- reifyTrace $ mx r
   return $ prependRandomnessTrace r $ trx
-reifyTrace (Score s plx) = do
-  trx <- reifyTrace $ plx
+reifyTrace (Score s mx) = do
+  trx <- reifyTrace $ mx
   return $ scoreTrace s $ trx
 
--- | run the PL with the randomness provided, and then
+-- | run the Rand with the randomness provided, and then
 -- return the rest of the proabilistic computation
-injectRandomness :: [Float] -> PL a -> PL a
+injectRandomness :: [Float] -> Rand a -> Rand a
 injectRandomness _ (Ret x) = Ret x
-injectRandomness (r:rs) (Sample01 r2plx)
- = injectRandomness rs (r2plx r)
-injectRandomness [] (Sample01 r2plx) = (Sample01 r2plx)
-injectRandomness rs (Score s plx) = Score s $ injectRandomness rs plx
+injectRandomness (r:rs) (Sample01 r2mx)
+ = injectRandomness rs (r2mx r)
+injectRandomness [] (Sample01 r2mx) = (Sample01 r2mx)
+injectRandomness rs (Score s mx) = Score s $ injectRandomness rs mx
 
 -- | Replace the element of a list at a given index
 replaceListAt :: Int -> a -> [a] -> [a]
@@ -257,9 +264,9 @@ replaceListAt ix a as = let (l, r) = (take (ix - 1) as, drop ix as)
 
 
 -- | Return a trace-adjusted MH computation
-mhStepT_ :: PL (Trace x) -- ^ proposal
+mhStepT_ :: Rand (Trace x) -- ^ proposal
          -> Trace x -- ^ current position
-         -> PL (Trace x)
+         -> Rand (Trace x)
 mhStepT_ mtx tx = do
   -- | Return the original randomness, perturbed
   trs' <- do
@@ -281,11 +288,11 @@ repeatM n f x = f x >>= repeatM (n - 1) f
 
 
 -- | Transformer that adjusts a computation according to MH
-mhT_ :: Trace x -> PL (Trace x) -> PL (Trace x)
+mhT_ :: Trace x -> Rand (Trace x) -> Rand (Trace x)
 mhT_ tx tmx = repeatM 10 (mhStepT_ tmx) $ tx
 
 -- | Find a starting position that does not have probability 0
-findNonZeroTrace :: PL (Trace x) -> PL (Trace x)
+findNonZeroTrace :: Rand (Trace x) -> Rand (Trace x)
 findNonZeroTrace mtx = do
   trx <- mtx
   if tscore trx /= 0
@@ -294,7 +301,7 @@ findNonZeroTrace mtx = do
 
 
 -- | run the computatation after taking weights into account
-weighted :: MCMC x => PL x -> PL [x]
+weighted :: MCMC x => Rand x -> Rand [x]
 weighted mx =
   let mtx = reifyTrace mx
       go tx = do
@@ -309,22 +316,22 @@ weighted mx =
 
 -- | Run the computation in an _unweighted_ fashion, not taking
 -- scores into account
-sample :: RandomGen g => g -> PL a -> (a, g)
+sample :: RandomGen g => g -> Rand a -> (a, g)
 sample g (Ret a) = (a, g)
-sample g (Sample01 f2plnext) =
-  let (f, g') = random g in sample g' (f2plnext f)
-sample g (Score f plx) = sample g plx
-sample g (Ap pla2x pla) =
-  let (a2x, g1) = sample g pla2x
-      (a, g2) = sample g1 pla
+sample g (Sample01 f2my) =
+  let (f, g') = random g in sample g' (f2my f)
+sample g (Score f mx) = sample g mx
+sample g (Ap m2x ma) =
+  let (a2x, g1) = sample g m2x
+      (a, g2) = sample g1 ma
    in (a2x a, g2)
 
 
 
-samples :: RandomGen g => Int -> g -> PL a -> ([a], g)
+samples :: RandomGen g => Int -> g -> Rand a -> ([a], g)
 samples 0 g _ = ([], g)
-samples n g pla = let (a, g') = sample g pla
-                      (as, g'') = samples (n - 1) g' pla
+samples n g ma = let (a, g') = sample g ma
+                     (as, g'') = samples (n - 1) g' ma
                  in (a:as, g'')
 
 
@@ -336,13 +343,13 @@ occurFrac as a =
     in (fromIntegral noccur) / (fromIntegral n)
 
 -- | biased coin
-coin :: Float -> PL Int -- 1 with prob. p1, 0 with prob. (1 - p1)
+coin :: Float -> Rand Int -- 1 with prob. p1, 0 with prob. (1 - p1)
 coin !p1 = do
     f <- sample01
     Ret $  if f <= p1 then 1 else 0
 
 -- | fair dice
-dice :: PL Int
+dice :: Rand Int
 dice = choose [1, 2, 3, 4, 5, 6]
 
 
@@ -386,7 +393,7 @@ printCoin bias = do
 
 
 -- | Create normal distribution as sum of uniform distributions.
-normal :: PL Float
+normal :: Rand Float
 normal =  do
   xs <-(replicateM 1000 (coin 0.5))
   return $ fromIntegral (sum xs) / 500.0
@@ -634,7 +641,7 @@ surfaceColor r s hitpoint = let factor = abs (cosine (rdir r) (sphereNormal s hi
 -- | return a random ray in a hemisphere at a position
 randRayAt :: Vec3 -- ^ position
           -> Vec3 -- ^ hemisphere normal
-          -> PL Ray
+          -> Rand Ray
 randRayAt p n = do
   -- | angle to the normal vector
   thetaToNormal <- (0.5 * pi *) <$> sample01
@@ -689,7 +696,7 @@ ramp i f = (fromIntegral (floor (f * fromIntegral i))) / (fromIntegral i)
 -- | path trace
 mcpt :: (Ray, Float) -- ^ given ray and weight of ray
      -> Int -- ^ Given depth of number of bounces
-     -> PL Vec3 -- ^ return final color
+     -> Rand Vec3 -- ^ return final color
 mcpt (ray, w) 4 = return $ zzz
 mcpt (ray, w) depth = do
   case closestSphere ray of
