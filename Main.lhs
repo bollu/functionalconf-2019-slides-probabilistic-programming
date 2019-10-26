@@ -1,10 +1,20 @@
-\documentclass{article}
+\documentclass{beamer}
+\usepackage[utf8]{inputenc}
+\usepackage[english]{babel}
 \usepackage{minted}
 \usepackage{comment}
+%https://tex.stackexchange.com/questions/365292/how-to-use-non-ascii-chars/365303#365303
+\usepackage{pmboxdraw}
+
 \newenvironment{code}{\VerbatimEnvironment \begin{minted}{haskell}}{\end{minted}}
+\newenvironment{ascii}{\VerbatimEnvironment \begin{minted}{text}}{\end{minted}}
 \newcommand{\hsmint}[1]{\mintinline{haskell}{#1}}
 
+
 \begin{document}
+
+
+\begin{comment}
 \begin{code}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ApplicativeDo #-}
@@ -30,7 +40,34 @@ import Data.Bits
 import GHC.Float
 import GHC.Exts
 import qualified Data.Map as M
+\end{code}
+\end{comment}
 
+A motivating example:
+
+
+\begin{code}
+predictCoinBias :: [Int] -> PL [Float]
+predictCoinBias flips = weighted $ do
+  b <- sample01
+  forM_ flips $ \f -> do
+    score $ if f == 1 then b else (1 - b)
+  return $ b
+\end{code}
+
+\begin{ascii}
+█▇▆▇▇▇▆▇▇▆_
+\end{ascii}
+
+
+\begin{verbatim}
+█▇▆▇▇▇▆▇▇▆_
+\end{verbatim}
+\input{|"cabal v2-exec slides -- predictUnbiased"}
+
+
+\begin{comment}
+\begin{code}
 
 compose :: Int -> (a -> a) -> (a -> a)
 compose 0 f = id
@@ -682,25 +719,30 @@ mcpt (ray, w) depth = do
 -- TODO: Think of using CPS to
 -- make you be able to scoreDistribution the distribution
 -- you are sampling from!
-predictCoinBias :: [Int] -> PL [Float]
-predictCoinBias flips = weighted $ do
-  b <- sample01
-  forM_ flips $ \f -> do
-    score $ if f == 1 then b else (1 - b)
-  return $ b
 
 
-
+latexWrapper :: IO () -> IO ()
+latexWrapper printer = do
+    putStrLn "\\begin{ascii}"
+    printer
+    putStrLn ""
+    putStrLn "\\end{ascii}"
 
 main :: IO ()
 main = do
+    let g = mkStdGen 1
     args <- getArgs
-    case args !! 1  of
-        "foo" -> putStrLn $ "foo"
+    case args !! 0  of
+        "predictUnbiased" -> do 
+            let (mcmcsamples, _) = sample g (predictCoinBias [])
+            -- latexWrapper $ printHistogam $ take 2000 $ mcmcsamples
+            -- latexWrapper $ printHistogam $ take 2000 $ mcmcsamples
+            latexWrapper $ putStr "█▇▆▇▇▇▆▇▇▆_"
+
+
         "bar" -> putStrLn $ "bar"
         _ -> putStrLn $ "unknown"
 
-    -- let g = mkStdGen 1
     -- printCoin 0.1
     -- printCoin 0.8
     -- printCoin 0.5
@@ -772,4 +814,7 @@ main = do
     -- printHistogam $ take 100 $ mcmcsamples
 
 \end{code}
+
+\end{comment}
+
 \end{document}
