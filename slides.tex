@@ -126,10 +126,15 @@ sample g (Ap m2x ma) =
 MCMC methods
 \end{frame}
 
+{\scriptsize \small
 \begin{frame}[fragile]
 \begin{code}
 -- | Trace all random choices made when generating this value
-data Trace a = Trace { tval :: a, tscore :: Float, trs :: [Float] }
+data Trace a =
+  Trace { tval :: a,
+          tscore :: Float,
+          trs :: [Float]
+        }
 -- | Lift a pure value into a Trace value
 mkTrace :: a -> Trace a
 mkTrace a = Trace a 1.0 []
@@ -141,18 +146,154 @@ recordRandomness :: Float -> Trace a -> Trace a
 recordRandomness r Trace{..} = Trace { trs = trs ++ [r], ..}
 \end{code}
 \end{frame}
+}
    
+{\scriptsize \tiny
+\begin{frame}[fragile]
+\begin{code}
+-- | Trace a random computation.
+-- We know what randomness is used
+traceR :: Rand x -> Rand (Trace x)
+traceR (Ret x) = Ret (mkTrace x)
+traceR (Sample01 mx) = do
+  r <- sample01
+  trx <- traceR $ mx r
+  return $ recordRandomness r $ trx
+traceR (Score s mx) = do
+  trx <- traceR $ mx
+  return $ scoreTrace s $ trx
+traceR (Ap rf rx) = do
+  trf <- traceR rf
+  trx <- traceR rx
+  return $ Trace { tval = (tval trf) (tval trx),
+          tscore = tscore trf * tscore trx,
+          trs = if length (trs trf) > length (trs trx)
+                   then trs trf
+                   else trs trx
+  }
+\end{code}
+\end{frame}
+}
 
-\begin{comment}
 
+-- | Return a trace-adjusted MH computation
+{\scriptsize \tiny
+\begin{frame}[fragile]
+\begin{code}
+
+  
+mhStep :: Rand (Trace x) -- ^ proposal
+         -> Trace x -- ^ current position
+         -> Rand (Trace x)
+mhStep r trace = do
+  -- | Return the original randomness, perturbed
+  rands' <- perturbRandomness (trs trace)
+  -- | Run the original computation with the perturbation
+  trace' <- feedRandomness rands' r
+  let ratio = traceAcceptance trace' / traceAcceptance trace
+  r <- sample01
+  return $ if r < ratio then trace' else trace
+  
+traceAcceptance :: Trace x -> Float
+traceAcceptance tx =
+  tscore tx * fromIntegral (length (trs tx))
+  
+perturbRandomness :: [Float] -> Rand [Float]
+perturbRandomness rands = do
+  ix <- choose [0..(length rands-1)] -- ^ Random index
+  r <- sample01 -- ^ random val
+  -- | Replace random index w/ random val.
+  return $ replaceListAt ix r rands 
+\end{code}
+\end{frame}
+}
+
+{\scriptsize \tiny
+\begin{frame}[fragile]
+\begin{code}
+-- | Find a starting position that does not have probability 0
+findNonZeroTrace :: Rand (Trace x) -> Rand (Trace x)
+findNonZeroTrace tracedR = do
+  trace <- tracedR
+  if tscore trace /= 0
+  then return $ trace
+  else findNonZeroTrace tracedR
+
+-- | run the computatation after taking weights into account
+weighted :: MCMC x => Rand x -> Rand [x]
+weighted r =
+  let tracedR = traceR r
+      -- go :: Rand (Trace x) -> Rand (Trace [x])
+      go tx = do
+        tx' <- repeatM 10 (mhStep tracedR) $ tx
+        liftA2 (:) (return tx) (go tx')
+  in do
+      seed <- findNonZeroTrace $ tracedR
+      tracedRs <- go seed 
+      return $ map tval tracedRs
+\end{code}
+\end{frame}
+}
+
+{\scriptsize \tiny
+\begin{frame}[fragile]{Payoff!}
 \begin{code}
 predictCoinBias :: [Int] -> Rand [Float]
 predictCoinBias flips = weighted $ do
   b <- sample01
   forM_ flips $ \f -> do
+    -- | Maximum a posterior
     score $ if f == 1 then b else (1 - b)
   return $ b
 \end{code}
+
+\begin{code}
+predictCoinBiasNoData :: Rand [Float]
+predictCoinBiasNoData = predictCoinBias []
+\end{code}
+
+\input{"| cabal v2-exec slides -- predictCoinBiasNoData"}
+
+
+\begin{code}
+predictCoinBias0 :: Rand [Float]
+predictCoinBias0 = predictCoinBias [0]
+\end{code}
+
+\input{"| cabal v2-exec slides -- predictCoinBias0"}
+
+\begin{code}
+predictCoinBias01 :: Rand [Float]
+predictCoinBias01 = predictCoinBias [0, 1]
+\end{code}
+
+\input{"| cabal v2-exec slides -- predictCoinBias01"}
+
+\end{frame}
+}
+
+
+{\scriptsize \tiny
+\begin{frame}[fragile]{More fun stuff: sample from arbitrary distributions}
+
+\begin{code}
+sampleSinSq :: Rand [Float]
+sampleSinSq = weighted $ do
+  x <- (6 *) <$> sample01
+  score $ (sin x) * (sin x)
+  return $ x
+\end{code}
+
+\input{"| cabal v2-exec slides -- sampleSinSq"}
+
+\end{frame}
+}
+
+
+
+\begin{comment}
+
+
 
 \begin{code}
 
@@ -254,27 +395,17 @@ instance MCMC Int where
     -- map [0, 1) -> (-infty, infty)
     uniform2val v = floor $ tan (-pi/2 + pi * v)
 
-
--- | lift a regular computation into the Trace world, where we know what
--- decisions were taken.
-reifyTrace :: Rand x -> Rand (Trace x)
-reifyTrace (Ret x) = Ret (mkTrace x)
-reifyTrace (Sample01 mx) = do
-  r <- sample01
-  trx <- reifyTrace $ mx r
-  return $ recordRandomness r $ trx
-reifyTrace (Score s mx) = do
-  trx <- reifyTrace $ mx
-  return $ scoreTrace s $ trx
-
 -- | run the Rand with the randomness provided, and then
 -- return the rest of the proabilistic computation
-injectRandomness :: [Float] -> Rand a -> Rand a
-injectRandomness _ (Ret x) = Ret x
-injectRandomness (r:rs) (Sample01 r2mx)
- = injectRandomness rs (r2mx r)
-injectRandomness [] (Sample01 r2mx) = (Sample01 r2mx)
-injectRandomness rs (Score s mx) = Score s $ injectRandomness rs mx
+feedRandomness :: [Float] -> Rand a -> Rand a
+feedRandomness _ (Ret x) = Ret x
+feedRandomness (r:rs) (Sample01 r2mx)
+ = feedRandomness rs (r2mx r)
+feedRandomness [] (Sample01 r2mx) = (Sample01 r2mx)
+feedRandomness rs (Score s mx) = Score s $ feedRandomness rs mx
+ -- | Ap allows us to reuse randomness
+ -- TODO: check that this is actually true. Not sure?
+feedRandomness rs (Ap f a) = Ap (feedRandomness rs f) (feedRandomness rs a)
 
 -- | Replace the element of a list at a given index
 replaceListAt :: Int -> a -> [a] -> [a]
@@ -282,56 +413,12 @@ replaceListAt ix a as = let (l, r) = (take (ix - 1) as, drop ix as)
                          in l ++ [a] ++ r
 
 
--- | Return a trace-adjusted MH computation
-mhStepT_ :: Rand (Trace x) -- ^ proposal
-         -> Trace x -- ^ current position
-         -> Rand (Trace x)
-mhStepT_ mtx tx = do
-  -- | Return the original randomness, perturbed
-  trs' <- do
-      let l = length $ trs tx
-      ix <- choose [0..(l-1)]
-      r <- sample01
-      return $ replaceListAt ix r (trs tx)
-  -- | Run the original computation with the perturbation
-  tx' <- injectRandomness trs' mtx
-  let ratio = (tscore tx' * fromIntegral (length (trs tx'))) /
-                 (tscore tx * fromIntegral (length (trs tx)))
-  r <- sample01
-  return $ if r < ratio then tx' else tx
-
 -- | Repeat monadic computation N times
 repeatM :: Monad m => Int -> (a -> m a) -> (a -> m a)
 repeatM 0 f x = return x
 repeatM n f x = f x >>= repeatM (n - 1) f
 
 
--- | Transformer that adjusts a computation according to MH
-mhT_ :: Trace x -> Rand (Trace x) -> Rand (Trace x)
-mhT_ tx tmx = repeatM 10 (mhStepT_ tmx) $ tx
-
--- | Find a starting position that does not have probability 0
-findNonZeroTrace :: Rand (Trace x) -> Rand (Trace x)
-findNonZeroTrace mtx = do
-  trx <- mtx
-  if tscore trx /= 0
-  then return $ trx
-  else findNonZeroTrace mtx
-
-
--- | run the computatation after taking weights into account
-weighted :: MCMC x => Rand x -> Rand [x]
-weighted mx =
-  let mtx = reifyTrace mx
-      go tx = do
-        tx' <- mhT_ tx mtx
-        liftA2 (:) (return tx) (go tx')
-        -- txs <- go tx'
-        -- return $ tx:txs
-  in do
-      tra <- findNonZeroTrace $ reifyTrace $ mx
-      tras <- go tra -- Need Applicative instance here!
-      return $ map tval tras
 
 
 samples :: RandomGen g => Int -> g -> Rand a -> ([a], g)
@@ -780,10 +867,21 @@ main = do
           latexWrapper $ print $ take 10 $ samples
           latexWrapper $ printHistogram 10 2 12 $ take 2000 $ (map fromIntegral samples)
           
-        "egSampleDiceNoCondition" -> do 
-            let (mcmcsamples, _) = sample g (predictCoinBias [])
-            latexWrapper $ printHistogram 36 2 36 $ take 2000 $ mcmcsamples
+        "predictCoinBiasNoData" -> do 
+            let (mcmcsamples, _) = sample g (predictCoinBiasNoData)
+            latexWrapper $ printHistogram 10 0 0.9 $ take 2000 $ mcmcsamples
+            
+        "predictCoinBias0" -> do 
+            let (mcmcsamples, _) = sample g (predictCoinBias0)
+            latexWrapper $ printHistogram 10 0 0.9 $ take 2000 $ mcmcsamples
+            
+        "predictCoinBias01" -> do 
+            let (mcmcsamples, _) = sample g (predictCoinBias01)
+            latexWrapper $ printHistogram 10 0 0.9 $ take 2000 $ mcmcsamples
 
+        "sampleSinSq" -> do 
+            let (mcmcsamples, _) = sample g (sampleSinSq)
+            latexWrapper $ printHistogram 10 0 6 $ take 2000 $ mcmcsamples
 
         "bar" -> putStrLn $ "bar"
         _ -> putStrLn $ "unknown"
