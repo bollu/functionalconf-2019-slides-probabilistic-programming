@@ -27,6 +27,9 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE MagicHash #-}
+{-# LANGUAGE NoMonomorphismRestriction #-}
+{-# LANGUAGE FlexibleContexts          #-}
+{-# LANGUAGE TypeFamilies              #-}
 import System.Random
 import System.Environment (getArgs)
 import Debug.Trace
@@ -39,6 +42,8 @@ import Control.Monad
 import Data.Bits
 import GHC.Float
 import GHC.Exts
+import qualified Diagrams.Prelude as D
+import qualified Diagrams.Backend.SVG.CmdLine as D
 import qualified Data.Map as M
 \end{code}
 \end{comment}
@@ -836,6 +841,9 @@ mcpt (ray, w) depth = do
 -- TODO: Think of using CPS to
 -- make you be able to scoreDistribution the distribution
 -- you are sampling from!
+
+diagramR :: RandomGen g => g -> Rand a -> D.Diagram D.B
+  diagramR g a = D.circle 1
 
 
 latexWrapper :: IO () -> IO ()

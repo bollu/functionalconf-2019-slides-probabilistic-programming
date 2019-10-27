@@ -7,6 +7,7 @@ version:             0.1.0.0
 build-type:          Simple
 executable slides
   main-is:             Main.lhs
-  build-depends:       base, containers, random
+  build-depends:       base, containers, random, diagrams-lib, diagrams-svg
+                       
   hs-source-dirs:      .
   default-language:    Haskell2010
