@@ -105,8 +105,43 @@ instance Monad Rand where
 \end{code}
 }
 \end{frame}
-   
 
+\begin{frame}[fragile]
+\begin{code}
+-- | Run the computation _unweighted_.
+-- | Ignores scores.
+sample :: RandomGen g => g -> Rand a -> (a, g)
+sample g (Ret a) = (a, g)
+sample g (Sample01 f2my) =
+  let (f, g') = random g in sample g' (f2my f)
+sample g (Score f mx) = sample g mx -- Ignore score
+sample g (Ap m2x ma) =
+  let (a2x, g1) = sample g m2x
+      (a, g2) = sample g1 ma
+   in (a2x a, g2)
+\end{code}
+\end{frame}
+
+\begin{frame}[fragile]
+MCMC methods
+\end{frame}
+
+\begin{frame}[fragile]
+\begin{code}
+-- | Trace all random choices made when generating this value
+data Trace a = Trace { tval :: a, tscore :: Float, trs :: [Float] }
+-- | Lift a pure value into a Trace value
+mkTrace :: a -> Trace a
+mkTrace a = Trace a 1.0 []
+-- | multiply a score to a trace
+scoreTrace :: Float -> Trace a -> Trace a
+scoreTrace f Trace{..} = Trace{tscore = tscore * f, ..}
+-- | Prepend randomness
+recordRandomness :: Float -> Trace a -> Trace a
+recordRandomness r Trace{..} = Trace { trs = trs ++ [r], ..}
+\end{code}
+\end{frame}
+   
 
 \begin{comment}
 
@@ -171,22 +206,6 @@ polyD p f = if 1 <= f && f <= 2 then (f ** p) * (p + 1) / (2 ** (p+1) - 1) else 
 type Random = Float
 type Score = Float
 
--- | Trace all random choices made when generating this value
-data Trace a = Trace { tval :: a, tscore :: Float, trs :: [Float] }
-
-
-
-
--- | Lift a pure value into a Trace value
-mkTrace :: a -> Trace a
-mkTrace a = Trace a 1.0 []
-
--- | multiply a score to a trace
-scoreTrace :: Float -> Trace a -> Trace a
-scoreTrace f Trace{..} = Trace{tscore = tscore * f, ..}
-
-prependRandomnessTrace :: Float -> Trace a -> Trace a
-prependRandomnessTrace r Trace{..} = Trace { trs = r:trs, ..}
 
 -- | operation to sample from [0, 1)
 sample01 :: Rand Float
@@ -243,7 +262,7 @@ reifyTrace (Ret x) = Ret (mkTrace x)
 reifyTrace (Sample01 mx) = do
   r <- sample01
   trx <- reifyTrace $ mx r
-  return $ prependRandomnessTrace r $ trx
+  return $ recordRandomness r $ trx
 reifyTrace (Score s mx) = do
   trx <- reifyTrace $ mx
   return $ scoreTrace s $ trx
@@ -313,19 +332,6 @@ weighted mx =
       tra <- findNonZeroTrace $ reifyTrace $ mx
       tras <- go tra -- Need Applicative instance here!
       return $ map tval tras
-
--- | Run the computation in an _unweighted_ fashion, not taking
--- scores into account
-sample :: RandomGen g => g -> Rand a -> (a, g)
-sample g (Ret a) = (a, g)
-sample g (Sample01 f2my) =
-  let (f, g') = random g in sample g' (f2my f)
-sample g (Score f mx) = sample g mx
-sample g (Ap m2x ma) =
-  let (a2x, g1) = sample g m2x
-      (a, g2) = sample g1 ma
-   in (a2x a, g2)
-
 
 
 samples :: RandomGen g => Int -> g -> Rand a -> ([a], g)
