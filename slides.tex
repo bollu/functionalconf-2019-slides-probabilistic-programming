@@ -106,9 +106,53 @@ score :: Float -> Rand ()
 \end{columns}
 \end{frame}
 
-\begin{frame}[fragile]{Program optimisation}
-        yy
+\begin{frame}[fragile]{Program optimisation (Uniform)}
+\begin{code}
+equivRandomProgram' :: Program -> Rand (Performance, Program)
+equivRandomProgram' p = do
+ (perf, p) <- equivRandomProgram p
+ score perf
+ return (perf, p')
+
+equivRandomProgram :: Program -> Rand (Performance, Program)
+equivRandomProgram p = do
+  p' <- modifyProgram p
+  if semanticsEqual p p'
+  then return (performance p', p')
+  else equivRandomProgram p -- ^ try again
+
+
+optimise :: Program -> Program
+optimise p = 
+  let ps' = sample 100 (equivRandomProgram p)
+  in snd $ maximumBy (compare . fst) ps'
+\end{code}
 \end{frame}
+
+
+\begin{frame}[fragile]{Program optimisation (Scored)}
+\begin{code}
+equivRandomProgram' :: Program -> Rand (Performance, Program)
+equivRandomProgram' p = do
+ (perf, p) <- equivRandomProgram p
+ score perf
+ return (perf, p')
+
+equivRandomProgram :: Program -> Rand (Performance, Program)
+equivRandomProgram p = do
+  p' <- modifyProgram p
+  if semanticsEqual p p'
+  then return (performance p', p')
+  else equivRandomProgram p -- ^ try again
+
+
+optimise :: Program -> Program
+optimise p = 
+  let ps' = sample 100 (equivRandomProgram p)
+  in snd $ maximumBy (compare . fst) ps'
+\end{code}
+\end{frame}
+
 
 
 \begin{frame}[fragile]{Learning from prior experience}
