@@ -3,6 +3,8 @@
 \usepackage[english]{babel}
 \usepackage{minted}
 \usepackage{comment}
+%\usepackage{graphics}
+\usepackage{graphicx}
 %https://tex.stackexchange.com/questions/365292/how-to-use-non-ascii-chars/365303#365303
 \usepackage{pmboxdraw}
 
@@ -18,7 +20,67 @@
 \institute{IIIT Hyderabad}
 \date{\today}
 
+\begin{frame}[fragile]{Our primitives}
+\begin{code}
+-- | Convert a pure value into a Rand value
+return :: a -> Rand a
 
+-- | Get a random number
+uniform01 :: Rand Float
+
+-- | take a Float, do *something*, and return nothing
+score :: Float -> Rand ()
+\end{code}
+
+\end{frame}
+
+
+\begin{frame}[fragile]{Raytracing - Part 1}
+\begin{minipage}[t]{0.3\linewidth}
+        \includegraphics[height=128px]{res/raytrace.pdf}
+\end{minipage}
+\begin{minipage}[t]{0.65\linewidth}
+{\scriptsize \footnotesize
+\begin{code}
+  -- | Send a ray 
+  sendRandRay :: Position -> Rand Color
+  sendRandRay p =
+        u <- uniform01
+        let angle = 360 * u -- angle in degrees
+        raytrace (makeRay p angle)
+
+  -- | Send a ray 
+  sendRandRay :: Position -> Rand Color
+  sendRandRay p =
+        u <- uniform01
+        let angle = 360 * u -- angle in degrees
+        raytrace (makeRay p angle)
+\end{code}
+}
+\end{minipage}
+\end{frame}
+
+\begin{frame}[fragile]{Program optimisation}
+        yy
+\end{frame}
+
+
+\begin{frame}[fragile]{Learning from prior experience}
+
+\begin{code}
+-- | Naive understanding, in the beginning of the process
+prior :: Rand a
+prior = ...
+
+-- | Learn as you go!
+learn :: Rand a
+learn = do
+  value <- prior
+  score (usefulness value)
+  return value
+\end{code}
+
+\end{frame}
 
 \begin{frame}[fragile]{Motivation}
 
