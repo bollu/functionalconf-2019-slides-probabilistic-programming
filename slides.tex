@@ -278,36 +278,45 @@ sample g (Score f mx) = sample g mx -- Ignore score
 MCMC methods
 \end{frame}
 
+
+\begin{frame}[fragile]{Traced Computations - Program}
+\includegraphics[height=280px]{res/program-1.pdf}
+\end{frame}
+
+\begin{frame}[fragile]{Traced Computations - Trace 1}
+\includegraphics[height=280px]{res/program-2.pdf}
+\end{frame}
+
+
+\begin{frame}[fragile]{Traced Computations - Trace 2}
+\includegraphics[height=280px]{res/program-3.pdf}
+\end{frame}
+
 \begin{frame}[fragile]
+\begin{columns}
+\column{\linewidth}
+{\scriptsize
 \begin{code}
 -- | Trace all random choices made when generating this value
 data Trace a =
   Trace { tval :: a, -- ^ The value itself
           tscore :: Double, -- ^ The total score
-          trs :: [Double] -- ^ The ranom numbers used
+          trs :: [Double] -- ^ The random numbers used
         }
--- | Lift a pure value into a Trace value
-mkTrace :: a -> Trace a
-mkTrace a = Trace a 1.0 []
--- | multiply a score to a trace
-scoreTrace :: Double -> Trace a -> Trace a
-scoreTrace f Trace{..} = Trace{tscore = tscore * f, ..}
--- | Prepend randomness
-recordRandomness :: Double -> Trace a -> Trace a
-recordRandomness r Trace{..} = Trace { trs = r:trs, ..}
 
 -- | Trace a random computation.
--- We know what randomness is used
 traceR :: Rand x -> Rand (Trace x)
-traceR (Ret x) = Ret (mkTrace x)
+traceR (Ret x) = Ret (Trace x 1.0 [])
 traceR (SampleUniform01 mx) = do
   r <- sample01
   trx <- traceR $ mx r
-  return $ recordRandomness r $ trx
+  return $ trx { trs=trs  ++ [r]}
 traceR (Score s mx) = do
   trx <- traceR $ mx
-  return $ scoreTrace s $ trx
+  return $ trx { tscore = tscore*s}
 \end{code}
+}
+\end{columns}
 \end{frame}
 
 
