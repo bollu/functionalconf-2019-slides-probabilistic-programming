@@ -59,7 +59,10 @@ import qualified Data.Map as M
 \begin{code}
 -- | fair dice
 dice :: Rand Int
-dice = choose [1, 2, 3, 4, 5, 6]
+dice = do
+  u <- uniform01
+  floor (7*u)
+
 
 tossDice :: Rand Int
 tossDice = do

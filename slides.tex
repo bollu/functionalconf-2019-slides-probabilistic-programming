@@ -28,10 +28,47 @@ return :: a -> Rand a
 -- | Get a random number
 uniform01 :: Rand Float
 
+-- | Take `n` samples from a random variable
+sample :: Int -> Rand a -> [a]
+
 -- | take a Float, do *something*, and return nothing
 score :: Float -> Rand ()
 \end{code}
 
+
+
+\end{frame}
+
+
+\begin{frame}[fragile]{First example -- The same as \hsmint{System.Random}}
+\begin{columns}
+\column{0.5\linewidth}
+\begin{code}
+-- | dice
+dice :: Rand Int
+dice = do
+  u <- uniform01
+  return $ floor (7*u)
+\end{code}
+
+\column{0.5\linewidth}
+\begin{code}
+-- | sum of dice
+tossDice :: Rand Int
+tossDice = do
+    d1 <- dice
+    d2 <- dice
+    return $ d1 + d2
+\end{code}
+\end{columns}
+
+\begin{code}
+main :: IO ()
+main = print $ sample 10 tossDice
+\end{code}
+
+\textbf{Output:}
+\input{"| cabal v2-exec slides -- tossDice"}
 \end{frame}
 
 
@@ -98,44 +135,51 @@ score :: Float -> Rand ()
        color' <- averageRays loc
        return $ mixColor surface color'
       None -> do
-        score 0.5 -- Reduce 
+        score 0.5 -- New! 
         return backgroundColor
 \end{code}
 }
-        \includegraphics[height=180px]{res/raytrace-scored.pdf}
+\includegraphics[height=180px]{res/raytrace-scored.pdf}
 \end{columns}
 \end{frame}
 
 \begin{frame}[fragile]{Program optimisation (Uniform)}
+\begin{columns}
+\column{\linewidth}
+{\scriptsize \footnotesize
 \begin{code}
-equivRandomProgram' :: Program -> Rand (Performance, Program)
-equivRandomProgram' p = do
- (perf, p) <- equivRandomProgram p
- score perf
- return (perf, p')
-
+-- | Randomly change programs and return their performance
 equivRandomProgram :: Program -> Rand (Performance, Program)
 equivRandomProgram p = do
   p' <- modifyProgram p
   if semanticsEqual p p'
   then return (performance p', p')
-  else equivRandomProgram p -- ^ try again
+  else return (0, p') -- A program that does not work has 0 perf.
 
-
+-- | Take the random samples and pick the good performing ones
 optimise :: Program -> Program
 optimise p = 
   let ps' = sample 100 (equivRandomProgram p)
   in snd $ maximumBy (compare . fst) ps'
 \end{code}
+}
+\end{columns}
 \end{frame}
 
 
 \begin{frame}[fragile]{Program optimisation (Scored)}
+\begin{columns}
+\column{\linewidth}
+{\scriptsize \footnotesize
 \begin{code}
 equivRandomProgram' :: Program -> Rand (Performance, Program)
 equivRandomProgram' p = do
  (perf, p) <- equivRandomProgram p
- score perf
+ let perf = 
+    if semanticsEqual p p'
+      then performance p'
+      else 0
+ score perf -- ^ Correct programs are more likely
  return (perf, p')
 
 equivRandomProgram :: Program -> Rand (Performance, Program)
@@ -143,14 +187,15 @@ equivRandomProgram p = do
   p' <- modifyProgram p
   if semanticsEqual p p'
   then return (performance p', p')
-  else equivRandomProgram p -- ^ try again
-
-
-optimise :: Program -> Program
-optimise p = 
-  let ps' = sample 100 (equivRandomProgram p)
-  in snd $ maximumBy (compare . fst) ps'
+  else return (0, p') -- A program that does not work has 0 perf.
 \end{code}
+}
+
+{\scriptsize \tiny
+    \texttt{http://stoke.stanford.edu/}\qquad
+    \texttt{https://github.com/bollu/blaze/blob/master/notebooks/tutorial.ipynb}
+}
+\end{columns}
 \end{frame}
 
 
@@ -382,6 +427,29 @@ sampleSinSq = do
 \end{code}
 
 \input{"| cabal v2-exec slides -- sampleSinSq"}
+
+\end{frame}
+
+
+\begin{frame}[fragile]{Transformations discovered by \texttt{STOKE}}
+\begin{columns}
+\column{\linewidth}
+{\scriptsize
+\begin{ascii}
+// constant folding: 2 + 3 -> 5
+*** original: (nparams: 0 | [IPush 2,IPush 3,IAdd])***
+[IPush 5] | score: 2.5
+
+// strength reduction: 2 * x -> x + x
+*** original: (nparams: 1 | [IPush 2,IMul])***
+[IDup,IAdd] | score: 2.25 
+
+// algebraic rewrite: x & x == x
+*** original: (nparams: 1 | progInsts = [IDup,IAnd])***
+[] | score: 3.0
+\end{ascii}
+}
+\end{columns}
 
 \end{frame}
 \end{document}
