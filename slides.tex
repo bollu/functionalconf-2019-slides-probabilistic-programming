@@ -29,7 +29,7 @@ return :: a -> Rand a
 uniform01 :: Rand Float
 
 -- | Take `n` samples from a random variable
-sample :: Int -> Rand a -> [a]
+samples :: Int -> Rand a -> [a]
 
 -- | take a Float, do *something*, and return nothing
 score :: Float -> Rand ()
@@ -143,6 +143,28 @@ main = print $ sample 10 tossDice
 \end{columns}
 \end{frame}
 
+\begin{frame}[fragile]{Exploring a complicated landscape}
+
+\begin{code}
+-- | Naive understanding / Little knowledge when we begin
+prior :: Rand a
+prior = ...
+
+-- | Learn as you go!
+learn :: Rand a
+learn = do
+  value <- prior
+  score (usefulness value)
+  return value
+
+-- | Generate samples according to unknown distribution
+-- (Rays from the raytracing)
+landscape :: [a]
+landscape = samples 1000 learn
+
+\end{code}
+\end{frame}
+
 \begin{frame}[fragile]{Program optimisation}
 \begin{columns}
 \column{\linewidth}
@@ -217,33 +239,11 @@ learn = do
 -- scored regions!
 best :: (Score, a)
 best = maximumBy (\a b -> compare (fst a) (fst b))
-        (sample nsamples learn)
+        (samples 1000 learn)
 \end{code}
 
 \end{frame}
 
-
-\begin{frame}[fragile]{Exploring a complicated landscape}
-
-\begin{code}
--- | Naive understanding / Little knowledge when we begin
-prior :: Rand a
-prior = ...
-
--- | Learn as you go!
-learn :: Rand a
-learn = do
-  value <- prior
-  score (usefulness value)
-  return value
-
--- | Generate samples according to unknown distribution
--- (Rays from the raytracing)
-samples :: [a]
-samples = sample nsamples learn
-
-\end{code}
-\end{frame}
 
 
 \begin{frame}[fragile]
