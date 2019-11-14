@@ -35,29 +35,75 @@ score :: Float -> Rand ()
 \end{frame}
 
 
-\begin{frame}[fragile]{Raytracing - Part 1}
-\begin{minipage}[t]{0.3\linewidth}
-        \includegraphics[height=128px]{res/raytrace.pdf}
-\end{minipage}
-\begin{minipage}[t]{0.65\linewidth}
-{\scriptsize \footnotesize
+\begin{frame}[fragile]{Raytracing (Default)}
+\begin{columns}
+\column{0.2\linewidth}
+        \includegraphics[height=180px]{res/raytrace.pdf}
+\column{0.6\linewidth}
+{\scriptsize
 \begin{code}
-  -- | Send a ray 
-  sendRandRay :: Position -> Rand Color
-  sendRandRay p =
-        u <- uniform01
-        let angle = 360 * u -- angle in degrees
-        raytrace (makeRay p angle)
+  -- | recursively raytrace
+  raytrace :: Ray -> Rand Color
+  raytrace r = do
+    case getCollision r of
+      Some (surface, loc) -> 
+       color' <- averageRays loc
+       return $ mixColor surface color'
+      None -> return backgroundColor
 
-  -- | Send a ray 
+  -- | Send a random ray 
   sendRandRay :: Position -> Rand Color
   sendRandRay p =
-        u <- uniform01
-        let angle = 360 * u -- angle in degrees
-        raytrace (makeRay p angle)
+    u <- uniform01
+    let angle = 360 * u
+    raytrace (makeRay p angle)
+
+  -- | Average rays sent from a location
+  averageRays :: Position -> Rand Color
+  averageRays p = do
+    -- | computationally wasteful
+    colors <- replicateM 100 (sendRandRay p)
+    return $ averageColors colors
+
+  -- | Default background color.
+  backgroundColor = white
 \end{code}
 }
-\end{minipage}
+\end{columns}
+\end{frame}
+
+\begin{frame}[fragile]{Raytracing (Scored)}
+\begin{columns}
+\column{0.5\linewidth}
+{\scriptsize
+\begin{code}
+  raytrace :: Ray -> Rand Color
+  raytrace r = do
+    case getCollision r of
+      Some (surface, loc) -> 
+       color' <- averageRays loc
+       return $ mixColor surface color'
+      None -> return backgroundColor
+\end{code}
+}
+
+\includegraphics[height=180px]{res/raytrace.pdf}
+\column{0.5\linewidth}
+{\scriptsize
+\begin{code}
+  raytrace' :: Ray -> Rand Color
+  raytrace' r = do
+    case getCollision r of
+      Some (surface, loc) -> 
+       color' <- averageRays loc
+       return $ mixColor surface color'
+      None -> do
+        score 0.5 -- Reduce 
+        return backgroundColor
+\end{code}
+}
+        \includegraphics[height=180px]{res/raytrace-scored.pdf}
+\end{columns}
 \end{frame}
 
 \begin{frame}[fragile]{Program optimisation}
