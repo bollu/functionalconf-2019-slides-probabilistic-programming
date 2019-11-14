@@ -15,10 +15,14 @@
 \begin{document}
 
 
-\title{My Presentation}
+\title{Probablistic Programming: Use cases and implementation}
 \author{Siddharth Bhat}
 \institute{IIIT Hyderabad}
-\date{\today}
+\date{\today\par (FunctionalConf '19)}
+
+\begin{frame}[fragile]
+\titlepage
+\end{frame}
 
 \begin{frame}[fragile]{Our primitives}
 \begin{code}
@@ -274,8 +278,7 @@ sample g (Score f mx) = sample g mx -- Ignore score
 \end{code}
 \end{frame}
 
-\begin{frame}[fragile]
-MCMC methods
+\begin{frame}[fragile]{MCMC methods}
 \end{frame}
 
 
@@ -292,12 +295,12 @@ MCMC methods
 \includegraphics[height=280px]{res/program-3.pdf}
 \end{frame}
 
-\begin{frame}[fragile]
+\begin{frame}[fragile]{Tracing: the data structure}
 \begin{columns}
 \column{\linewidth}
-{\scriptsize
+{
 \begin{code}
--- | Trace all random choices made when generating this value
+-- | Trace all random choices made
 data Trace a =
   Trace { tval :: a, -- ^ The value itself
           tscore :: Double, -- ^ The total score
@@ -320,37 +323,75 @@ traceR (Score s mx) = do
 \end{frame}
 
 
--- | Return a trace-adjusted MH computation
-\begin{frame}[fragile]
+\begin{frame}[fragile]{Metropolis Hastings}
 \begin{code}
-
-  
 mhStep :: Rand (Trace x) -- ^ proposal
          -> Trace x -- ^ current position
-         -> Rand (Trace x)
+         -> Rand (Trace x) -- ^ new
 mhStep r trace = do
   -- | Return the original randomness, perturbed
   rands' <- perturbRandomness (trs trace)
   -- | Run the original computation with the perturbation
   trace' <- feedRandomness rands' r
-  let ratio = traceAcceptance trace' / traceAcceptance trace
+  let ratio = trAccept trace' / trAccept trace
   r <- sample01
   return $ if r < ratio then trace' else trace
+\end{code}
   
-traceAcceptance :: Trace x -> Double
-traceAcceptance tx =
-  tscore tx * fromIntegral (length (trs tx))
-  
-perturbRandomness :: [Double] -> Rand [Double]
+\begin{columns}
+\column{0.5\linewidth}
+{\scriptsize
+\begin{code}
+trAccept :: Trace x -> Double
+trAccept tx =
+  tscore tx * 
+  fromIntegral (length (trs tx))
+\end{code}
+}
+\column{0.5\linewidth}
+{\scriptsize
+\begin{code}
+perturbRandomness :: [Double] 
+  -> Rand [Double]
 perturbRandomness rands = do
-  ix <- choose [0..(length rands-1)] -- ^ Random index
+  -- | Random index
+  ix <- choose [0..(length rands-1)]
   r <- sample01 -- ^ random val
-  -- | Replace random index w/ random val.
+  -- | Replace random index
+  -- with random val.
   return $ replaceListAt ix r rands 
 \end{code}
+}
+\end{columns}
 \end{frame}
 
-\begin{frame}[fragile]
+\begin{frame}[fragile]{Odds and Ends}
+\begin{columns}
+\column{\linewidth}
+{\scriptsize
+\begin{code}
+-- | run the computatation after taking weights into account
+samples :: Int -> Rand x -> Rand [x]
+samples 0 _ = return []
+samples n r =
+  let tracedR = traceR r
+      -- go :: Int -> Rand (Trace x) -> Rand (Trace [x])
+      go 0 _ = return []
+      go n tx = do
+        tx' <- repeatM 10 (mhStep tracedR) $ tx -- !
+        txs <- go (n-1) tx'
+        return (tx:txs)
+  in do
+      seed <- findNonZeroTrace $ tracedR
+      tracedRs <- go n seed 
+      return $ map tval tracedRs
+\end{code}
+}
+\end{columns}
+
+\begin{columns}
+\column{\linewidth}
+{\scriptsize
 \begin{code}
 -- | Find a starting position that does not have probability 0
 findNonZeroTrace :: Rand (Trace x) -> Rand (Trace x)
@@ -359,30 +400,30 @@ findNonZeroTrace tracedR = do
   if tscore trace /= 0
   then return $ trace
   else findNonZeroTrace tracedR
-
--- | run the computatation after taking weights into account
-weighted :: MCMC x => Int -> Rand x -> Rand [x]
-weighted 0 _ = return []
-weighted n r =
-  let tracedR = traceR r
-      -- go :: Int -> Rand (Trace x) -> Rand (Trace [x])
-      go 0 _ = return []
-      go n tx = do
-        tx' <- repeatM 10 (mhStep tracedR) $ tx
-        txs <- go (n-1) tx'
-        return (tx:txs)
-  in do
-      seed <- findNonZeroTrace $ tracedR
-      tracedRs <- go n seed 
-      return $ map tval tracedRs
 \end{code}
+}
+\end{columns}
+
 \end{frame}
 
 
 \begin{frame}[fragile]{Thank you!}
+  \begin{beamercolorbox}[center]{title}
     Questions?
+  \end{beamercolorbox}
 
-    (A big thank you to everyone at \texttt{tweag.io} who read the literature with me!)
+
+
+
+
+  \vfill
+  \begin{beamercolorbox}[center]{title}
+        \includegraphics[height=64px]{res/tweag-io.pdf}
+  \end{beamercolorbox}
+
+  \begin{beamercolorbox}[center]{title}
+    (A huge thank you to everyone at \texttt{tweag.io} who read the literature with me!)
+  \end{beamercolorbox}
 \end{frame}
 
 
