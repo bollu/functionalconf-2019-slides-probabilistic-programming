@@ -87,9 +87,24 @@ tossDicePrime = do
 \begin{frame}[fragile]
 \begin{code}
 data Rand x where
+    -- | Lift a pure value
     Ret :: x -> Rand x
-    SampleUniform01 :: (Double -> Rand x) -> Rand x
+    -- | pick an integer uniformly in the range [lo, hi]
+    Choose :: (Int, Int) -> (Int -> Rand x) -> Rand x
+    -- | Change the probability of a given value
     Score :: Double -> Rand x -> Rand x
+
+choose :: (Int, Int) -> Rand Int
+choose (lo, hi) = Choose (lo, hi) Ret
+
+score :: Double -> Rand ()
+score s = Score s (Ret ())
+
+-- | Uniform distributinon on (0, 1)
+uniform01 :: Rand Double
+uniform01 = do
+    x <- choose (0, 65535)
+    return $ x / 65535.0
 \end{code}
 \end{frame}
 
@@ -97,7 +112,7 @@ data Rand x where
 \begin{code}
 instance Functor Rand where
   fmap f (Ret x) = Ret (f x)
-  fmap f (SampleUniform01 r2mx) = SampleUniform01 (\r -> fmap f (r2mx r))
+  fmap f (Choose lohi next) = Choose lo hi (\r -> fmap f (next r))
   fmap f (Score s mx) = Score s (fmap f mx)
 instance Applicative Rand where
   pure = Ret
@@ -105,7 +120,7 @@ instance Applicative Rand where
 instance Monad Rand where
   return = Ret
   (Ret x) >>= x2my = x2my x
-  (SampleUniform01 r2mx) >>= x2my = SampleUniform01 (\r -> r2mx r >>= x2my)
+  (Choose lohi r2mx) >>= x2my = Choose lohi (\r -> r2mx r >>= x2my)
   (Score s mx) >>= x2my = Score s (mx >>= x2my)
 \end{code}
 \end{comment}
@@ -116,8 +131,8 @@ instance Monad Rand where
 -- | Ignores scores.
 sample :: RandomGen g => g -> Rand a -> (a, g)
 sample g (Ret a) = (a, g)
-sample g (SampleUniform01 f2my) =
-  let (f, g') = random g in sample g' (f2my f)
+sample g (Choose lohi next) =
+  let (r, g') = randomR lohi g in sample g'(next r)
 sample g (Score f mx) = sample g mx -- Ignore score
 \end{code}
 \end{frame}
@@ -132,7 +147,7 @@ MCMC methods
 data Trace a =
   Trace { tval :: a, -- ^ The value itself
           tscore :: Double, -- ^ The total score
-          trs :: [Double] -- ^ The ranom numbers used
+          trs :: [Int] -- ^ The ranom numbers used
         }
 -- | Lift a pure value into a Trace value
 mkTrace :: a -> Trace a
@@ -141,15 +156,15 @@ mkTrace a = Trace a 1.0 []
 scoreTrace :: Double -> Trace a -> Trace a
 scoreTrace f Trace{..} = Trace{tscore = tscore * f, ..}
 -- | Prepend randomness
-recordRandomness :: Double -> Trace a -> Trace a
+recordRandomness :: Int -> Trace a -> Trace a
 recordRandomness r Trace{..} = Trace { trs = r:trs, ..}
 
 -- | Trace a random computation.
 -- We know what randomness is used
 traceR :: Rand x -> Rand (Trace x)
 traceR (Ret x) = Ret (mkTrace x)
-traceR (SampleUniform01 mx) = do
-  r <- sample01
+traceR (Choose lohi next) = do
+  r <- choose lohi
   trx <- traceR $ mx r
   return $ recordRandomness r $ trx
 traceR (Score s mx) = do
@@ -173,19 +188,28 @@ mhStep r trace = do
   -- | Run the original computation with the perturbation
   trace' <- feedRandomness rands' r
   let ratio = traceAcceptance trace' / traceAcceptance trace
-  r <- sample01
+  -- | sample a random float from (0, 1)
+  r <- (choose (0, 100)) / 100
   return $ if r < ratio then trace' else trace
   
 traceAcceptance :: Trace x -> Double
 traceAcceptance tx =
   tscore tx * fromIntegral (length (trs tx))
   
-perturbRandomness :: [Double] -> Rand [Double]
+perturbRandomness :: [((Int, Int), Int)] -> Rand [Int]
 perturbRandomness rands = do
-  ix <- choose [0..(length rands-1)] -- ^ Random index
-  r <- sample01 -- ^ random val
+  ix <- choose (0, (length rands-1)) -- ^ Random index
+  let ((lo, hi), _) = rands !! ix
+  r <- choose (lo, hi)
   -- | Replace random index w/ random val.
-  return $ replaceListAt ix r rands 
+  return $ replaceListAt ix ((lo, hi), r) rands 
+
+-- | run the Rand with the randomness provided, and then
+-- return the rest of the proabilistic computation
+feedRandomness :: [Double] -> Rand a -> Rand a
+feedRandomness (r:rs) (Choose lohi next) = feedRandomness rs (next r)
+feedRandomness rs (Score s mx) = Score s $ feedRandomness rs mx
+feedRandomness _ r = r
 \end{code}
 \end{frame}
 
@@ -200,7 +224,7 @@ findNonZeroTrace tracedR = do
   else findNonZeroTrace tracedR
 
 -- | run the computatation after taking weights into account
-weighted :: MCMC x => Int -> Rand x -> Rand [x]
+weighted ::  Int -> Rand x -> Rand [x]
 weighted 0 _ = return []
 weighted n r =
   let tracedR = traceR r
@@ -221,7 +245,9 @@ weighted n r =
 \begin{code}
 predictCoinBias :: [Int] -> Rand Double
 predictCoinBias flips = do
-  b <- sample01
+  -- | Start with uniform prior
+  b <- uniform01
+
   forM_ flips $ \f -> do
     -- | Maximum a posterior
     score $ if f == 1 then b else (1 - b)
@@ -252,20 +278,6 @@ predictCoinBias01 = predictCoinBias [0, 1]
 
 \end{frame}
 
-
-\begin{frame}[fragile]{More fun stuff: sample from arbitrary distributions}
-
-\begin{code}
-sampleSinSq :: Rand Double
-sampleSinSq = do
-  x <- (6 *) <$> sample01
-  score $ (sin x) * (sin x)
-  return $ x
-\end{code}
-
-\input{"| cabal v2-exec slides -- sampleSinSq"}
-
-\end{frame}
 
 
 
@@ -298,89 +310,7 @@ series2spark :: Show a => RealFrac a => a -> [a] -> String
 series2spark maxv vs = map (num2spark maxv) vs
 
 -- Probabilites
--- ============
-type F = Double
--- | probablity density
-type P = Double
-
--- | prob. distributions over space a
-type D a = a -> P
-
--- | Scale the distribution by a Double value
-dscale :: D a -> Double -> D a
-dscale d f a = f *  d a
-
-uniform :: Int -> D a
-uniform n _ = 1.0 / (fromIntegral $ n)
-
-
--- | Normal distribution with given mean
-normalD :: Double -> (Double -> Double)
-normalD mu f  =  exp (- ((f-mu)^2))
-
--- | Distribution that takes on value x^p for 1 <= x <= 2.  Is normalized
-polyD :: Double -> (Double -> Double)
-polyD p f = if 1 <= f && f <= 2 then (f ** p) * (p + 1) / (2 ** (p+1) - 1) else 0
-
-type Random = Double
-type Score = Double
-
-
--- | operation to sample from [0, 1)
-sample01 :: Rand Double
-sample01 = SampleUniform01 Ret
-
-score :: Double -> Rand ()
-score s = Score s (Ret ())
-
-condition :: Bool -> Rand ()
-condition True = score 1
-condition False = score 0
-
--- | convert a distribution into a Rand
-d2pl :: (Double, Double) -> D Double -> Rand Double
-d2pl (lo, hi) d = do
-  u <- sample01
-  let a = lo + u * (hi - lo)
-  score $  d a
-  return $ a
-
 -- | A way to choose uniformly. Maybe slightly biased due to an off-by-one ;)
-choose :: [a] -> Rand a
-choose as = do
-    let l = length as
-    u <- sample01
-    let ix = floor $ u /  (1.0 / fromIntegral l)
-    return $ as !! ix
-
-instance MCMC a => MCMC (Trace a) where
-  arbitrary = Trace { tval = arbitrary , tscore = 1.0, trs = []}
-  uniform2val f = Trace { tval = uniform2val f,  tscore = 1.0, trs = []}
-
--- Typeclass that can provide me with data to run MCMC on it
-class MCMC a where
-    arbitrary :: a
-    uniform2val :: Double -> a
-
-instance MCMC Double where
-    arbitrary = 0
-    -- map [0, 1) -> (-infty, infty)
-    uniform2val v = tan (-pi/2 + pi * v)
-
-
-instance MCMC Int where
-    arbitrary = 0
-    -- map [0, 1) -> (-infty, infty)
-    uniform2val v = floor $ tan (-pi/2 + pi * v)
-
--- | run the Rand with the randomness provided, and then
--- return the rest of the proabilistic computation
-feedRandomness :: [Double] -> Rand a -> Rand a
-feedRandomness _ (Ret x) = Ret x
-feedRandomness (r:rs) (SampleUniform01 r2mx)
- = feedRandomness rs (r2mx r)
-feedRandomness [] (SampleUniform01 r2mx) = (SampleUniform01 r2mx)
-feedRandomness rs (Score s mx) = Score s $ feedRandomness rs mx
 
 -- | Replace the element of a list at a given index
 replaceListAt :: Int -> a -> [a] -> [a]
@@ -392,30 +322,6 @@ replaceListAt ix a as = let (l, r) = (take (ix - 1) as, drop ix as)
 repeatM :: Monad m => Int -> (a -> m a) -> (a -> m a)
 repeatM 0 f x = return x
 repeatM n f x = f x >>= repeatM (n - 1) f
-
-
-
-
-samples :: RandomGen g => Int -> g -> Rand a -> ([a], g)
-samples 0 g _ = ([], g)
-samples n g ma = let (a, g') = sample g ma
-                     (as, g'') = samples (n - 1) g' ma
-                 in (a:as, g'')
-
-
--- | count fraction of times value occurs in list
-occurFrac :: (Eq a) => [a] -> a -> Double
-occurFrac as a =
-    let noccur = length (filter (==a) as)
-        n = length as
-    in (fromIntegral noccur) / (fromIntegral n)
-
--- | biased coin
-coin :: Double -> Rand Int -- 1 with prob. p1, 0 with prob. (1 - p1)
-coin !p1 = do
-    f <- sample01
-    Ret $  if f <= p1 then 1 else 0
-
 
 
 
@@ -436,378 +342,11 @@ histogram nbuckets minv maxv as =
      in map snd . M.toList $ bucketed
 
 
--- printSamples :: (Real a, Eq a, Ord a, Show a) => String -> a -> [a] -> IO ()
--- printSamples s maxv as =  do
---     putStrLn $ "***" <> s
---     putStrLn $ "   samples: " <> series2spark maxv (map toRational as)
-
-
 printHistogram :: Int -> Double -> Double -> [Double] -> IO ()
 printHistogram nbuckets minv maxv samples =
   let histValues = (map fromIntegral . histogram nbuckets minv maxv $  samples) :: [Double]
   in putStrLn $ series2spark (maximum histValues) histValues
 
-
--- -- | Given a coin bias, take samples and print bias
--- printCoin :: Double -> IO ()
--- printCoin bias = do
---     let g = mkStdGen 1
---     let (tosses, _) = samples 100 g (coin bias)
---     error $ "unimplemented"
---     -- printSamples ("bias: " <> show bias) tosses
--- 
--- 
--- -- | Create normal distribution as sum of uniform distributions.
--- normal :: Rand Double
--- normal =  do
---   xs <-(replicateM 1000 (coin 0.5))
---   return $ fromIntegral (sum xs) / 500.0
--- 
--- 
--- -- | This file can be copy-pasted and will run!
--- 
--- -- | Symbols
--- type Sym = String
--- -- | Environments
--- type E a = M.Map Sym a
--- -- | Newtype to represent deriative values
--- 
--- newtype Der = Der { under :: F } deriving(Show, Num)
--- 
--- infixl 7 !#
--- -- | We are indexing the map at a "hash" (Sym)
--- (!#) :: E a -> Sym -> a
--- (!#) = (M.!)
--- 
--- -- | A node in the computation graph
--- data Node =
---   Node { name :: Sym -- ^ Name of the node
---        , ins :: [Node] -- ^ inputs to the node
---        , out :: E F -> F -- ^ output of the node
---        , der :: (E F, E (Sym -> Der))
---                   -> Sym -> Der -- ^ derivative wrt to a name
---        }
--- 
--- -- | @ looks like a "circle", which is a node. So we are indexing the map
--- -- at a node.
--- (!@) :: E a -> Node -> a
--- (!@) e node = e M.! (name node)
--- 
--- -- | Given the current environments of values and derivatives, compute
--- -- | The new value and derivative for a node.
--- run_ :: (E F, E (Sym -> Der)) -> Node -> (E F, E (Sym -> Der))
--- run_ ein (Node name ins out der) =
---   let (e', ed') = foldl run_ ein ins -- run all the inputs
---       v = out e' -- compute the output
---       dv = der (e', ed') -- and the derivative
---   in (M.insert name v e', M.insert name dv ed')  -- and insert them
--- 
--- -- | Run the program given a node
--- run :: E F -> Node -> (E F, E (Sym -> Der))
--- run e n = run_ (e, mempty) n
--- 
--- -- | Let's build nodes
--- nconst :: Sym -> F -> Node
--- nconst n f = Node n [] (\_ -> f) (\_ _ -> 0)
--- 
--- -- | Variable
--- nvar :: Sym -> Node
--- nvar n = Node n [] (!# n) (\_ n' -> if n == n' then 1 else 0)
--- 
--- -- | binary operation
--- nbinop :: (F -> F -> F)  -- ^ output computation from inputs
---  -> (F -> Der -> F -> Der -> Der) -- ^ derivative computation from outputs
---  -> Sym -- ^ Name
---  -> (Node, Node) -- ^ input nodes
---  -> Node
--- nbinop f df n (in1, in2) =
---   Node { name = n
---        , ins = [in1, in2]
---        , out = \e -> f (e !# name in1) (e !# name in2)
---        , der = \(e, ed) n' ->
---                  let (name1, name2) = (name in1, name in2)
---                      (v1, v2) = (e !# name1, e !# name2)
---                      (dv1, dv2) = (ed !# name1 $ n', ed !# name2 $ n')
---                      in df v1 dv1 v2 dv2
---        }
--- 
--- nadd :: Sym -> (Node, Node) -> Node
--- nadd = nbinop (+) (\v dv v' dv' -> dv + dv')
--- 
--- nmul :: Sym -> (Node, Node) -> Node
--- nmul = nbinop (*) (\v (Der dv) v' (Der dv') -> Der $ (v*dv') + (v'*dv))
--- 
--- -- | 3 vector
--- data Vec3 = Vec3 { vx :: Double, vy :: Double, vz :: Double }
--- 
--- instance Semigroup Vec3 where
---   (<>) = (^+)
--- instance Monoid Vec3 where
---   mempty = zzz
---   mappend = (<>)
--- 
--- -- | get maximum component
--- vmax :: Vec3 -> Double
--- vmax (Vec3 vx vy vz) = foldl1 max [vx, vy, vz]
--- 
--- -- | vector addition
--- (^+) :: Vec3  -> Vec3 -> Vec3
--- (^+) (Vec3 x y z) (Vec3 x' y' z') =
---   Vec3 (x + x') (y + y') (z + z')
--- 
--- -- | vector subtraction
--- (^-) :: Vec3 -> Vec3 -> Vec3
--- (^-) x y = x ^+ ((-1.0) ^* y)
--- 
--- -- | sclar multiplication
--- (^*) :: Double -> Vec3 -> Vec3
--- (^*) r (Vec3 x y z) =
---   Vec3 (x * r) (y * r) (z * r)
--- 
--- (^/) :: Vec3 -> Double -> Vec3
--- v ^/ r = (1.0 / r) ^* v
--- 
--- -- | dot product
--- (^.) :: Vec3 -> Vec3 -> Double
--- (^.) (Vec3 x y z) (Vec3 x' y' z') = (x * x') + (y * y') + (z * z')
--- 
--- veclensq :: Vec3 -> Double
--- veclensq v = v ^. v
--- 
--- veclen :: Vec3 -> Double
--- veclen = sqrt . veclensq
--- 
--- cosine :: Vec3 -> Vec3 -> Double
--- cosine v w = v ^. w / ((veclen v) * (veclen w))
--- 
--- -- | cross product
--- cross :: Vec3 -> Vec3 -> Vec3
--- cross (Vec3 x y z) (Vec3 x' y' z') =
---   let xnew = y * z' - z * y'
---       ynew = z * x' - x * z'
---       znew = x * y' - y * x'
---    in Vec3 xnew ynew znew
--- 
--- vecnorm :: Vec3 -> Vec3
--- vecnorm v =  (1.0 / veclen v) ^*  v
--- 
--- 
--- -- | zero vector
--- zzz :: Vec3
--- zzz = Vec3 0.0 0.0 0.0
--- 
--- xzz :: Vec3
--- xzz = Vec3 1.0 0.0 0.0
--- 
--- zyz :: Vec3
--- zyz = Vec3 0.0 1.0 0.0
--- 
--- --  | ray with origin and direction
--- data Ray = Ray { rorigin :: Vec3, rdir :: Vec3}
--- 
--- -- | project the ray for some magnitude
--- (-->) :: Ray -> Double -> Vec3
--- Ray{..} --> d = rorigin ^+ (d ^* rdir)
--- 
--- data Refl = Diff | Specular | Refract
--- 
--- data Sphere =
---   Sphere { srad :: Double
---          , spos :: Vec3
---          , semission :: Vec3
---          , scolor :: Vec3
---          , srefl :: Refl
---          }
--- 
--- 
--- -- | Get the normal vector from the center of a sphere to a point
--- sphereNormal :: Sphere -> Vec3 -> Vec3
--- sphereNormal Sphere{..} pos =
---   vecnorm $ pos ^- spos
--- 
--- -- | List of spheres to render
--- gspheres :: [Sphere]
--- gspheres =
---   --[ Sphere 0.2 (Vec3 0.0 0.0 (-2.0)) (Vec3 1.0 1.0 1.0) (Vec3 1.0 1.0 1.0) Diff,
---   [ -- Sphere 0.8 (Vec3 0.0 (-0.5) 3.0) zzz (Vec3 0 1 0) Refract,
---     -- Sphere 0.2 (Vec3 (-0.3) 0.0 2.0) zzz (Vec3 1.0 0.0 0.0) Diff,
---     -- Sphere 0.2 (Vec3 0.3 0.0 2.0) zzz (Vec3 0.0 0.0 1.0) Diff,
---     -- Sphere 0.2 (Vec3 0.0 0.0 1.5) zzz (Vec3 1.0 1.0 0.0) Refract,
---     Sphere 5000000 (Vec3 (-5000000-20) 0 0) (Vec3 0 0 1) zzz Diff, -- left
---     Sphere 5000000 (Vec3 (5000000+20) 0 0) (Vec3 1 0 0) zzz Diff, -- right
---     Sphere 5000000 (Vec3 0 0 (5000000+99)) (Vec3 0 1 0) zzz Diff, -- back
---     Sphere 5000000 (Vec3 0 (5000000+10) 0) (Vec3 1 1 0) zzz Diff, -- bottom
---     Sphere 5000000 (Vec3 0 (-5000000-10) 0) (Vec3 0 1 1) zzz Diff, -- top
---     Sphere 40 (Vec3 0 (-48) 50) (Vec3 1 1 1) zzz Diff -- light
---   ]
--- 
--- -- | epsilon
--- eps :: Double
--- eps = 0.0001
--- 
--- -- | solve quadratic and return the smaller root
--- solveQuadratic :: Double -> Double -> Double -> [Double]
--- solveQuadratic a b c =
---   let disc = b*b - 4*a*c
---    in if disc < 0
---       then []
---       else let r = (-b + sqrt disc) / (2 * a)
---                r' = (-b - sqrt disc) / (2 * a)
---             in [r, r']
--- 
--- -- |x - spos|^2 = srad^2
--- -- x = rorigin + t . rdir
--- -- | we assume that the ray direction is *normalized*
--- sintersect :: Ray -> Sphere -> Maybe Double
--- sintersect Ray{..} Sphere{..} = do
---   let o = spos ^- rorigin  -- ^ original relative to ray corrdiates
---       a = rdir ^. rdir
---       b = -2.0 * (rdir ^. o)
---       c = o ^. o - srad * srad
---       roots = [r | r <- solveQuadratic a b c, r >= 0]
---    in case roots of
---         [] -> Nothing
---         [r] -> Just r
---         [r, r'] ->  Just $ min r r'
--- 
--- 
--- -- | Return the smallest value from a list
--- listmin :: (Ord o) => (a -> Maybe o) -> [a] -> Maybe (a, o)
--- listmin f [] = Nothing
--- listmin f (x:xs) =
---   case (listmin f xs, f x) of
---     (other, Nothing) -> other
---     (Nothing, Just xcmp) -> Just (x, xcmp)
---     (Just (x', x'cmp), Just xcmp) ->
---           pure $ if xcmp < x'cmp then (x, xcmp) else (x', x'cmp)
--- 
--- -- | Get the closest sphere along a ray and the distance traveled
--- closestSphere :: Ray ->  Maybe (Sphere, Double)
--- closestSphere r = listmin (sintersect r) gspheres
--- 
--- 
--- clamp01 :: Double -> Double
--- clamp01 f
---   | f < 0 = 0
---   | f > 1 = 1
---   | otherwise = f
--- 
--- vclamp01 :: Vec3 -> Vec3
--- vclamp01 (Vec3 x y z) = Vec3 (clamp01 x) (clamp01 y) (clamp01 z)
--- 
--- -- | Return the color of the surface of the sphere at this
--- -- angle of the viewing ray, given the point of contact
--- surfaceColor :: Ray -> Sphere -> Vec3 -> Vec3
--- surfaceColor r s hitpoint = let factor = abs (cosine (rdir r) (sphereNormal s hitpoint))
---  in factor ^* (scolor s)
--- 
--- 
--- 
--- -- | return a random ray in a hemisphere at a position
--- randRayAt :: Vec3 -- ^ position
---           -> Vec3 -- ^ hemisphere normal
---           -> Rand Ray
--- randRayAt p n = do
---   -- | angle to the normal vector
---   thetaToNormal <- (0.5 * pi *) <$> sample01
---   -- | pick a uniform angle on the circle picked by the theta to normal
---   thetaCircle <- (2.0 * pi *) <$> sample01
---   -- | right now, I'm going to fuck around and implement something somewhat incorrect
---   -- apply some small random perturbation to the given normal vector...
---   r1 <- (\x -> (x - 0.5)*0.05) <$> sample01
---   r2 <- (\x -> (x - 0.5)*0.05) <$> sample01
---   let x' = vx n + r1
---   let y' = vx n + r2
---   let z' = sqrt (1.0 - x'*x' - y'*y')
---   -- | move the origin along the normal so it doesn't intersect the sphere again...
---   return $ Ray (p ^+ (0.01 ^* n)) n
--- 
--- -- | Given colors and the viewing angle, get the final color
--- mergeLightColors :: Vec3 -> Vec3 -> [Vec3] -> Vec3
--- mergeLightColors view hitpoint vs =
---   vclamp01 $  foldl (^+) zzz vs
--- 
--- v3map :: (Double -> Double) -> Vec3 -> Vec3
--- v3map f (Vec3 x y z) = Vec3 (f x) (f y) (f z)
--- colormul :: Vec3 -> Vec3 -> Vec3
--- colormul (Vec3 x y z) (Vec3 x' y' z') = Vec3 (x*x') (y*y') (z*z')
--- 
--- -- | take average of vectors
--- vecavg :: [Vec3] -> Vec3
--- vecavg [] = mempty
--- vecavg vs = mconcat vs ^/ (fromIntegral $ length vs)
--- 
--- -- | NOTE: assumes the vector we are projecting on is normalized
--- vecprojecton :: Vec3 -- ^ vector to be projected
---              -> Vec3 -- ^ subspace on which we are projecting
---              -> Vec3
--- vecprojecton v vp = let vpnorm = vecnorm vp in (v ^. vpnorm) ^* vpnorm
--- 
--- -- | find the rejection of the vector along this diretion
--- vecrejecton :: Vec3 -> Vec3 -> Vec3
--- vecrejecton v vp = v ^- vecprojecton v vp
--- 
--- -- | reflect the vector about another vector
--- vecReflect :: Vec3 -> Vec3 -> Vec3
--- vecReflect v n = vecprojecton v n ^- vecrejecton v n
--- 
--- -- | ramp the value, by creating "hard steps"
--- ramp :: Int -> Double -> Double
--- ramp i f = (fromIntegral (floor (f * fromIntegral i))) / (fromIntegral i)
--- 
--- -- https://www.cs.cmu.edu/afs/cs/academic/class/15462-f09/www/lec/lec8.pdf
--- -- https://maverick.inria.fr/~Nicolas.Holzschuch/cours/Slides/1b_Materiaux.pdf
--- -- http://www.graphics.stanford.edu/courses/cs348b-01/course29.hanrahan.pdf
--- -- | path trace
--- mcpt :: (Ray, Double) -- ^ given ray and weight of ray
---      -> Int -- ^ Given depth of number of bounces
---      -> Rand Vec3 -- ^ return final color
--- mcpt (ray, w) 4 = return $ zzz
--- mcpt (ray, w) depth = do
---   case closestSphere ray of
---     Nothing -> do
---       score 0.1 -- we want to _avoid_ this region of program space!
---       return $  zzz
---     Just (sphere@Sphere{srefl=Refract}, raylen) -> do
---         let hitpoint = ray --> raylen
---         let normal = sphereNormal sphere hitpoint
---         let project = vecprojecton (rdir ray) normal
---         let reject = vecrejecton (rdir ray) normal
--- 
---         let refracted = (1.4 ^* project) ^+ reject
---         let rayReflected = Ray (hitpoint ^+ (0.01 ^* normal)) (vecReflect ((-1.0) ^* (rdir ray)) normal)
---         let rayRefracted = Ray (hitpoint ^+ (0.01 ^* refracted)) (vecnorm $ refracted)
---         refracted <- mcpt (rayRefracted, w) (depth + 1)
---         reflected <- mcpt (rayReflected, w) (depth + 1)
---         return $ v3map (ramp 4) $ (0.2 ^* reflected) ^+ (0.8 ^* refracted)
--- 
---     Just (sphere@Sphere{srefl=Specular}, raylen) -> do
---         let hitpoint = ray --> raylen
---         let normal = sphereNormal sphere hitpoint
---         let rayReflected = Ray (hitpoint ^+ (0.01 ^* normal)) (vecReflect ((-1.0) ^* (rdir ray)) normal)
---         return  $ error $ "unimplemented"
--- 
---     Just (sphere@Sphere{srefl=Diff}, raylen) -> do
---         let hitpoint = ray --> raylen
---         let normal = sphereNormal sphere hitpoint
---         -- | ray going out
---         let rayReflected = Ray (hitpoint ^+ (0.01 ^* normal)) (vecReflect ((-1.0) ^* (rdir ray)) normal)
--- 
---         -- | local diffuse color
---         incomingrays <- replicateM 1 $ do
---                   -- rayOutward <- -- randRayAt hitpoint normal
---                   let rayOutward = rayReflected
---                   color <- mcpt (rayOutward, w) (depth + 1)
---                   return $ (rayOutward, color)
---         let incomingColor = vecavg $ [ (clamp01 $ cosine (rdir rayOutward) normal) ^* lightcolor | (rayOutward, lightcolor) <- incomingrays]
---         let localDiffuse = colormul (scolor sphere) incomingColor
---         return $ (semission sphere) ^+ (v3map (ramp 5) $ localDiffuse) -- localEmission -- ^+ fromHemisphre ^+ localEmission
-
--- | A distribution over coin biases, given the data of the coin
--- flips seen so far. 1 or 0
--- TODO: Think of using CPS to
--- make you be able to scoreDistribution the distribution
--- you are sampling from!
 
 diagramR :: RandomGen g => g -> Rand a -> D.Diagram D.B
 diagramR g a = D.circle 1
@@ -854,82 +393,9 @@ main = do
             let (mcmcsamples, _) = sample g (weighted 2000 predictCoinBias01)
             latexWrapper $ printHistogram 10 0 0.9 $ take 2000 $ mcmcsamples
 
-        "sampleSinSq" -> do 
-            let (mcmcsamples, _) = sample g (weighted 2000 sampleSinSq)
-            latexWrapper $ printHistogram 10 0 6 $  mcmcsamples
-
         "bar" -> putStrLn $ "bar"
         _ -> putStrLn $ "unknown"
 
-    -- printCoin 0.1
-    -- printCoin 0.8
-    -- printCoin 0.5
-    -- printCoin 0.7
-
-    -- let (mcmcsamples, _) = samples 10 g (dice)
-    -- printSamples "fair dice" (fromIntegral <$> mcmcsamples)
-
-
-    -- putStrLn $ "biased dice : (x == 1 || x == 6)"
-    -- let (mcmcsamples, _) =
-    --       sample g
-    --         (weighted $ (do
-    --                 x <- dice
-    --                 condition (x <= 1 || x >= 6)
-    --                 return x))
-    -- putStrLn $ "biased dice samples: " <> (show $ take 10 mcmcsamples)
-    -- printSamples "bised dice: " (fromIntegral <$> take 100 mcmcsamples)
-
-    -- putStrLn $ "normal distribution using central limit theorem: "
-    -- let (nsamples, _) = samples 1000 g normal
-    -- -- printSamples "normal: " nsamples
-    -- printHistogram $  nsamples
-
-
-    -- putStrLn $ "normal distribution using MCMC: "
-    -- let (mcmcsamples, _) = sample g (weighted $ d2pl (-10, 10) $ normalD 0.5)
-    -- printHistogram $ take 10000 $  mcmcsamples
-
-    -- putStrLn $ "sampling from x^4 with finite support"
-    -- let (mcmcsamples, _) = sample g (weighted $ d2pl (0, 5)$  \x -> x ** 2)
-    -- printHistogram $ take 1000  mcmcsamples
-
-
-    -- putStrLn $ "sampling from |sin(x)| with finite support"
-    -- let (mcmcsamples, _) = sample g (weighted $ d2pl (0, 6)$  \x -> abs (sin x))
-    -- printHistogram $ take 10000 mcmcsamples
-
-
-    -- putStrLn $ "bias distribution with supplied with []"
-    -- let (mcmcsamples, _) = sample g (predictCoinBias [])
-    -- printHistogram $ take 1000 $ mcmcsamples
-
-    -- putStrLn $ "bias distribution with supplied with [True]"
-    -- let (mcmcsamples, _) = sample g (predictCoinBias [1, 1])
-    -- printHistogram $ take 1000 $ mcmcsamples
-
-
-    -- putStrLn $ "bias distribution with supplied with [0] x 10"
-    -- let (mcmcsamples, _) = sample g (predictCoinBias (replicate 10 0))
-    -- printHistogram $ take 100 $ mcmcsamples
-
-    -- putStrLn $ "bias distribution with supplied with [1] x 2"
-    -- let (mcmcsamples, _) = sample g (predictCoinBias (replicate 2 1))
-    -- printHistogram $ take 100 $ mcmcsamples
-
-    -- putStrLn $ "bias distribution with supplied with [1] x 30"
-    -- let (mcmcsamples, _) = sample g (predictCoinBias (replicate 30 1))
-    -- printHistogram $ take 100 $ mcmcsamples
-
-
-    -- putStrLn $ "bias distribution with supplied with [0, 1]"
-    -- let (mcmcsamples, _) = sample g (predictCoinBias (mconcat $ replicate 10 [0, 1]))
-    -- printHistogram $ take 100 $ mcmcsamples
-
-
-    -- putStrLn $ "bias distribution with supplied with [1, 0]"
-    -- let (mcmcsamples, _) = sample g (predictCoinBias (mconcat $ replicate 20 [1, 0]))
-    -- printHistogram $ take 100 $ mcmcsamples
 
 \end{code}
 
