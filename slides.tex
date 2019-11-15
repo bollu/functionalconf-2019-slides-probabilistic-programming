@@ -189,7 +189,7 @@ landscape = samples 1000 learn
     \end{itemize}
 \end{frame}
 
-\begin{frame}[fragile]{Program optimisation - Pseudocode}
+\begin{frame}[fragile]{Program optimisation Pseudocode}
 \begin{columns}
 \column{\linewidth}
 {\scriptsize \footnotesize
@@ -218,22 +218,24 @@ optimise p =
 \column{\linewidth}
 {\scriptsize \footnotesize
 \begin{code}
-equivRandomProgram' :: Program -> Rand (Performance, Program)
-equivRandomProgram' p = do
- (perf, p) <- equivRandomProgram p
- let perf = 
-    if semanticsEqual p p'
-      then performance p'
-      else 0
- score perf -- ^ Correct programs are more likely
- return (perf, p')
-
 equivRandomProgram :: Program -> Rand (Performance, Program)
 equivRandomProgram p = do
   p' <- modifyProgram p
   if semanticsEqual p p'
   then return (performance p', p')
   else return (0, p') -- A program that does not work has 0 perf.
+\end{code}
+\pause
+\begin{code}
+equivRandomProgram' :: Program -> Rand (Performance, Program)
+equivRandomProgram' p = do
+ (perf, p) <- equivRandomProgram p
+ let perf = 
+    if semanticsEqual p p'
+      then 5 + performance p' -- Correct programs are given high score
+      else performance p' -- Fast incorrect programs are also allowed
+ score perf -- ^ Correct programs are more likely
+ return (perf, p')
 \end{code}
 }
 
@@ -371,6 +373,12 @@ sample g (Score f mx) = sample g mx -- Ignore score
 \begin{frame}[fragile]{Traced Computations - Trace 2}
 \includegraphics[height=280px]{res/program-3.pdf}
 \end{frame}
+
+
+\begin{frame}[fragile]{Traced Computations - Trace 3}
+\includegraphics[height=280px]{res/program-4.pdf}
+\end{frame}
+
 
 \begin{frame}[fragile]{Tracing: the data structure}
 \begin{columns}
