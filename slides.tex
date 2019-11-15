@@ -26,6 +26,12 @@
 
 \begin{frame}[fragile]{Our primitives}
 \begin{code}
+data Rand a = ...
+
+instance Functor Rand
+instance Applicative Rand
+instance Monad Rand
+
 -- | Convert a pure value into a Rand value
 return :: a -> Rand a
 
@@ -131,6 +137,8 @@ main = do
 }
 
 \includegraphics[height=180px]{res/raytrace.pdf}
+
+\pause
 \column{0.5\linewidth}
 {\scriptsize
 \begin{code}
@@ -171,7 +179,17 @@ landscape = samples 1000 learn
 \end{code}
 \end{frame}
 
+
 \begin{frame}[fragile]{Program optimisation}
+    \begin{itemize}
+        \item A hypothetical stack-based machine (eg. JVM bytecode!)
+        \item Intructions are \texttt{Push}, \texttt{Add}, \texttt{Dup}, \texttt{Sub}
+        \item Want to automatically discover optimisations
+        \item Neural nets do not work - no gradient!
+    \end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]{Program optimisation - Pseudocode}
 \begin{columns}
 \column{\linewidth}
 {\scriptsize \footnotesize
@@ -195,7 +213,7 @@ optimise p =
 \end{frame}
 
 
-\begin{frame}[fragile]{Program optimisation (Scored)}
+\begin{frame}[fragile]{Program optimisation Pseudocode (Scored)}
 \begin{columns}
 \column{\linewidth}
 {\scriptsize \footnotesize
@@ -270,7 +288,20 @@ f(x) = x & x
 \end{columns}
 \end{frame}
 
-\begin{frame}[fragile]{Optimisation on a complicated landscape}
+\begin{frame}[fragile]{\texttt{STOKE}: The intuition}
+    \includegraphics[width=256px]{res/MCMC-STOKE.png}
+\end{frame}
+
+
+\begin{frame}[fragile]{\texttt{STOKE}: The intuition}
+    \includegraphics[width=256px]{res/STOKE-why-random-search-works.png}
+\end{frame}
+
+\begin{frame}[fragile]{\texttt{STOKE}: A real-world example}
+    \includegraphics[height=200px]{res/STOKE-real-world-code.png}
+\end{frame}
+
+\begin{frame}[fragile]{Gradient-free optimisation on a complicated landscape}
 
 \begin{code}
 -- | Naive understanding / Little knowledge when we begin
