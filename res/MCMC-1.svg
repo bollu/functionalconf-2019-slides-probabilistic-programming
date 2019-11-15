@@ -55,9 +55,9 @@
      borderopacity="1.0"
      inkscape:pageopacity="0.0"
      inkscape:pageshadow="2"
-     inkscape:zoom="0.7"
-     inkscape:cx="103.8969"
-     inkscape:cy="593.98235"
+     inkscape:zoom="0.98994949"
+     inkscape:cx="376.22354"
+     inkscape:cy="548.98387"
      inkscape:document-units="px"
      inkscape:current-layer="layer1"
      showgrid="false"
@@ -116,7 +116,7 @@
          x="354.28571"
          y="916.64789">x</tspan></text>
     <path
-       style="fill:none;fill-rule:evenodd;stroke:#1565c0;stroke-width:5;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:1"
+       style="fill:none;fill-rule:evenodd;stroke:#0d0d0d;stroke-width:5;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:0.19607843"
        d="m 114.28571,733.79078 575.71429,0"
        id="path8167"
        inkscape:connector-curvature="0" />
@@ -138,14 +138,28 @@
          sodipodi:role="line"
          x="186.85715"
          y="549.79077"
-         id="tspan10365">         then 2</tspan><tspan
+         id="tspan10365">         then <tspan
+   style="fill:#ad1457;fill-opacity:1"
+   id="tspan12137">0.5</tspan></tspan><tspan
          sodipodi:role="line"
          x="186.85715"
          y="599.79077"
-         id="tspan10367">         else 1)</tspan><tspan
+         id="tspan10369">         else <tspan
+   style="fill:#1565c0;fill-opacity:1"
+   id="tspan12155">1</tspan>)</tspan><tspan
          sodipodi:role="line"
          x="186.85715"
          y="649.79077"
          id="tspan10261" /></text>
+    <path
+       style="fill:none;fill-rule:evenodd;stroke:#ad1457;stroke-width:5;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:1"
+       d="m 379.83339,790.22762 312.85715,0"
+       id="path8167-6"
+       inkscape:connector-curvature="0" />
+    <path
+       style="fill:none;fill-rule:evenodd;stroke:#1565c0;stroke-width:3.38997602;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:1"
+       d="m 116.18357,733.65908 264.64289,0"
+       id="path8167-1"
+       inkscape:connector-curvature="0" />
   </g>
 </svg>
