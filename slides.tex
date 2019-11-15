@@ -24,6 +24,16 @@
 \titlepage
 \end{frame}
 
+
+\begin{frame}[fragile]{Outline}
+    \begin{itemize}
+        \item How is this different from \hsmint{System.Random}?
+        \item What is Probablistic programming, and when can I use it?
+        \item A sketch of the algorithm.
+        \item Hunt me down post-talk for a wealth of details.
+    \end{itemize}
+\end{frame}
+
 \begin{frame}[fragile]{Our primitives}
 \begin{code}
 data Rand a = ...
@@ -41,7 +51,7 @@ uniform01 :: Rand Float
 -- | Take `n` samples from a random variable
 samples :: Int -> Rand a -> [a]
 
--- | take a Float, do *something*, and return nothing
+-- | take a Float, do *something*, and return no nothing
 score :: Float -> Rand ()
 \end{code}
 
@@ -340,7 +350,6 @@ data Rand x where
 instance Functor Rand
 instance Applicative Rand
 instance Monad Rand
-
 \end{code}
 (\hsmint{Rand} is a free monad)
 \end{frame}
@@ -349,44 +358,24 @@ instance Monad Rand
 \begin{code}
 -- | Run the computation _unweighted_,
 -- | ignores scores.
-sample :: RandomGen g => g -> Rand a -> (a, g)
-sample g (Ret a) = (a, g)
-sample g (SampleUniform01 f2my) =
+sampleUnweighted :: RandomGen g => g -> Rand a -> (a, g)
+sampleUnweighted g (Ret a) = (a, g)
+sampleUnweighted g (SampleUniform01 f2my) =
   let (f, g') = random g in sample g' (f2my f)
-sample g (Score f mx) = sample g mx -- Ignore score
+sampleUnweighted g (Score f mx) = 
+  error "unable to handle Score"
 \end{code}
 \end{frame}
 
-\begin{frame}[fragile]{MCMC methods}
+
+\begin{frame}[fragile]{How do we handle Score?}
+    \begin{itemize}
+        \item Game plan: convert \hsmint{Rand a} to \hsmint{Rand (Trace a)}.
+        \item \hsmint{Rand a} may contain \hsmint{Score}, \hsmint{Rand (Trace a)} will not.
+        \item \hsmint{Rand (Trace a)} will have extra information to make \hsmint{Score} work.
+\end{itemize}
 \end{frame}
 
-
-\begin{frame}[fragile]{Probability Distributions: Uniform}
-    \includegraphics[height=280px]{res/uniform-PDF.pdf}
-\end{frame}
-
-
-\begin{frame}[fragile]{Probability Distributions: Programs!}
-    \includegraphics[height=280px]{res/MCMC-1.pdf}
-\end{frame}
-
-\begin{frame}[fragile]{Probability Distributions: the tension}
-    \begin{columns}
-        \column{0.5\linewidth}
-        \includegraphics[height=256px]{res/density-forward.pdf}
-        \column{0.5\linewidth}
-        \begin{itemize}
-            \item $f: A \rightarrow B$ is known.
-            \item $f^{-1}: B \rightarrow A$ is required for the density.
-            \item This is intractable.
-        \end{itemize}
-    \end{columns}
-\end{frame}
-
-
-
-\begin{frame}[fragile]{Traced MCMC methods}
-\end{frame}
 \begin{frame}[fragile]{Traced Computations - Program}
 \includegraphics[height=280px]{res/program-1.pdf}
 \end{frame}
@@ -418,14 +407,14 @@ data Trace a =
           trs :: [Double] -- ^ The random numbers used
         }
 
--- | Trace a random computation.
+-- | Trace a random computation (remove Score)
 traceR :: Rand x -> Rand (Trace x)
 traceR (Ret x) = Ret (Trace x 1.0 [])
 traceR (SampleUniform01 mx) = do
   r <- sample01
   trx <- traceR $ mx r
-  return $ trx { trs=trs  ++ [r]}
-traceR (Score s mx) = do
+  return $ trx { trs=trs ++ [r]}
+traceR (Score s mx) = do -- ^ No score in the RHS
   trx <- traceR $ mx
   return $ trx { tscore = tscore*s}
 \end{code}
@@ -517,6 +506,13 @@ findNonZeroTrace tracedR = do
 
 \end{frame}
 
+\begin{frame}[fragile]{Takeaways}
+    \begin{itemize}
+        \item Probablistic Programming is a powerful model of computation.
+        \item Free monads allow for introspection.
+        \item Implementation is deceptively simple (hopefully!)
+    \end{itemize}
+\end{frame}
 
 \begin{frame}[fragile]{Thank you!}
   \begin{beamercolorbox}[center]{title}
@@ -594,6 +590,33 @@ sampleSinSq = do
 \input{"| cabal v2-exec slides -- sampleSinSq"}
 
 \end{frame}
+
+
+\begin{frame}{Deep dive into MCMC methods}
+\end{frame}
+
+\begin{frame}[fragile]{Probability Distributions: Uniform}
+    \includegraphics[height=280px]{res/uniform-PDF.pdf}
+\end{frame}
+
+
+\begin{frame}[fragile]{Probability Distributions: Programs!}
+    \includegraphics[height=280px]{res/MCMC-1.pdf}
+\end{frame}
+
+\begin{frame}[fragile]{Probability Distributions: the tension}
+    \begin{columns}
+        \column{0.5\linewidth}
+        \includegraphics[height=256px]{res/density-forward.pdf}
+        \column{0.5\linewidth}
+        \begin{itemize}
+            \item $f: A \rightarrow B$ is known.
+            \item $f^{-1}: B \rightarrow A$ is required for the density.
+            \item This is intractable.
+        \end{itemize}
+    \end{columns}
+\end{frame}
+
 
 
 
