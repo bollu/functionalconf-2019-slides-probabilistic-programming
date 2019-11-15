@@ -45,7 +45,7 @@ instance Monad Rand
 -- | Convert a pure value into a Rand value
 return :: a -> Rand a
 
--- | Get a random number
+-- | Get a random number in [0, 1)
 uniform01 :: Rand Float
 
 -- | Take `n` samples from a random variable
@@ -68,7 +68,7 @@ score :: Float -> Rand ()
 dice :: Rand Int
 dice = do
   u <- uniform01
-  return $ floor (7*u)
+  return $ 1 + floor (6*u)
 \end{code}
 
 \column{0.5\linewidth}
@@ -377,11 +377,20 @@ sampleUnweighted g (Score f mx) =
 \end{frame}
 
 
+\begin{frame}[fragile]{Semantics of Score: Uniform probability}
+    \includegraphics[height=280px]{res/uniform-PDF.pdf}
+\end{frame}
+
+\begin{frame}[fragile]{Semantics of Score: Custom probability!}
+    \includegraphics[height=280px]{res/MCMC-1.pdf}
+\end{frame}
+
 \begin{frame}[fragile]{How do we handle Score?}
     \begin{itemize}
         \item Game plan: convert \hsmint{Rand a} to \hsmint{Rand (Trace a)}.
         \item \hsmint{Rand a} may contain \hsmint{Score}, \hsmint{Rand (Trace a)} will not.
         \item \hsmint{Rand (Trace a)} will have extra information to make \hsmint{Score} work.
+        \item Can use \hsmint{sampleUnweighted} on \hsmint{Rand (Trace a)}. It will respect \hsmint{Score}.
 \end{itemize}
 \end{frame}
 
@@ -633,15 +642,6 @@ sampleSinSq = do
 
 
 \begin{frame}{Deep dive into MCMC methods}
-\end{frame}
-
-\begin{frame}[fragile]{Probability Distributions: Uniform}
-    \includegraphics[height=280px]{res/uniform-PDF.pdf}
-\end{frame}
-
-
-\begin{frame}[fragile]{Probability Distributions: Programs!}
-    \includegraphics[height=280px]{res/MCMC-1.pdf}
 \end{frame}
 
 \begin{frame}[fragile]{Probability Distributions: the tension}
