@@ -68,7 +68,9 @@ tossDice = do
 
 \begin{code}
 main :: IO ()
-main = print $ sample 10 tossDice
+main = do
+  print $ sample 10 tossDice
+  drawHistogram $ sample 100 tossDice
 \end{code}
 
 \textbf{Output:}
@@ -220,6 +222,50 @@ equivRandomProgram p = do
 {\scriptsize \tiny
     \texttt{http://stoke.stanford.edu/}\qquad
     \texttt{https://github.com/bollu/blaze/blob/master/notebooks/tutorial.ipynb}
+}
+\end{columns}
+\end{frame}
+
+\begin{frame}[fragile]{Use case: Transformations discovered by \texttt{STOKE}}
+\begin{columns}
+\column{\linewidth}
+{\scriptsize
+\begin{itemize}
+\item
+\begin{ascii}
+f = 2 + 3
+(nparams: 0 | [IPush 2,IPush 3,IAdd])
+\end{ascii}
+\pause
+\begin{ascii}
+[IPush 5] | score: 2.5
+// constant folding: 2 + 3 -> 5
+\end{ascii}
+\pause
+
+\item
+\begin{ascii}
+f(x) = 2 * x
+(nparams: 1 | [IPush 2,IMul])
+\end{ascii}
+\pause
+\begin{ascii}
+[IDup,IAdd] | score: 2.25 
+// strength reduction: 2 * x -> x + x
+\end{ascii}
+\pause
+
+\item
+\begin{ascii}
+f(x) = x & x
+(nparams: 1 | progInsts = [IDup,IAnd])
+\end{ascii}
+\pause
+\begin{ascii}
+[] | score: 3.0
+// algebraic rewrite: x & x == x
+\end{ascii}
+\end{itemize}
 }
 \end{columns}
 \end{frame}
@@ -484,27 +530,6 @@ sampleSinSq = do
 
 \end{frame}
 
-
-\begin{frame}[fragile]{Use case: Transformations discovered by \texttt{STOKE}}
-\begin{columns}
-\column{\linewidth}
-{\scriptsize
-\begin{ascii}
-// constant folding: 2 + 3 -> 5
-*** original: (nparams: 0 | [IPush 2,IPush 3,IAdd])***
-[IPush 5] | score: 2.5
-
-// strength reduction: 2 * x -> x + x
-*** original: (nparams: 1 | [IPush 2,IMul])***
-[IDup,IAdd] | score: 2.25 
-
-// algebraic rewrite: x & x == x
-*** original: (nparams: 1 | progInsts = [IDup,IAnd])***
-[] | score: 3.0
-\end{ascii}
-}
-\end{columns}
-\end{frame}
 
 
 
