@@ -7,15 +7,19 @@
 \usepackage{graphicx}
 %https://tex.stackexchange.com/questions/365292/how-to-use-non-ascii-chars/365303#365303
 \usepackage{pmboxdraw}
+\usepackage{biblatex}
+\usepackage{amsmath}
+\usepackage{amssymb}
 
 \newenvironment{code}{\VerbatimEnvironment \begin{minted}{haskell}}{\end{minted}}
 \newenvironment{ascii}{\VerbatimEnvironment \begin{minted}{text}}{\end{minted}}
 \newcommand{\hsmint}[1]{\mintinline{haskell}{#1}}
 
+\addbibresource{references.bib}
 \begin{document}
 
 
-\title{Probablistic Programming: Use cases and implementation}
+\title{Probabilistic Programming: Use cases and implementation}
 \author{Siddharth Bhat}
 \institute{IIIT Hyderabad}
 \date{November 16, 2019\par (FunctionalConf '19)}
@@ -28,7 +32,7 @@
 \begin{frame}[fragile]{Outline}
     \begin{itemize}
         \item How is this different from \hsmint{System.Random}?
-        \item What is Probablistic programming, and when can I use it?
+        \item What is Probabilistic programming, and when can I use it?
         \item A sketch of the algorithm.
         \item Hunt me down post-talk for a wealth of details.
     \end{itemize}
@@ -201,7 +205,7 @@ Program(f) = [Push 2; Mul]
 [BOT x] -Push 2-> [BOT x; 2] -Mul-> [BOT x*2]
 \end{ascii}
 \pause
-\item Want to automatically discover optimisations
+\item Want to automatically discover optimizations
 \begin{ascii}
 f(x) = x*2 = x+x
 Program(f) = [Dup; Add]
@@ -213,7 +217,7 @@ Faster (addition is faster than multiplication)
 \end{itemize}
 \end{frame}
 
-\begin{frame}[fragile]{Program optimisation Pseudocode (Random)}
+\begin{frame}[fragile]{Program optimization pseudocode (Random)}
 Key idea: Randomly change the initial program and pick the best.
 \begin{columns}
 \column{\linewidth}
@@ -238,7 +242,7 @@ optimise p =
 \end{frame}
 
 
-\begin{frame}[fragile]{Program optimisation Pseudocode (Scored)}
+\begin{frame}[fragile]{Program optimisation pseudocode (Scored)}
 \begin{columns}
 \column{\linewidth}
 {\scriptsize \footnotesize
@@ -405,7 +409,7 @@ sampleUnweighted g (Score f mx) =
         \item Game plan: convert \hsmint{Rand a} to \hsmint{Rand (Trace a)}.
         \item \hsmint{Rand a} may contain \hsmint{Score}, \hsmint{Rand (Trace a)} will not.
         \item \hsmint{Rand (Trace a)} will have extra information to make \hsmint{Score} work.
-        \item Can use \hsmint{sampleUnweighted} on \hsmint{Rand (Trace a)}. It will respect \hsmint{Score}, but not use \hsmint{Score}
+        \item Can use \hsmint{sampleUnweighted} on \hsmint{Rand (Trace a)}. It will respect \hsmint{Score}, but not use \hsmint{Score}.
 \end{itemize}
 \end{frame}
 
@@ -534,7 +538,7 @@ perturbRandomness rands = do
 \column{\linewidth}
 {\scriptsize
 \begin{code}
--- | run the computatation after taking weights into account
+-- | run the computation after taking weights into account
 samples :: Int -> Rand x -> Rand [x]
 samples 0 _ = return []
 samples n r =
@@ -572,7 +576,7 @@ findNonZeroTrace tracedR = do
 
 \begin{frame}[fragile]{Takeaways}
     \begin{itemize}
-        \item Probablistic Programming is a powerful model of computation.
+        \item Probabilistic Programming is a powerful model of computation.
         \item Free monads is essential: allows for introspection.
         \item Implementation is deceptively simple (hopefully!)
     \end{itemize}
@@ -599,9 +603,10 @@ findNonZeroTrace tracedR = do
 
 
 \begin{frame}[allowframebreaks]{References}
-        \bibliographystyle{amsalpha}
+        %\bibliographystyle{acm}
+        %\bibliographystyle{amsalpha}
         \nocite{*}
-        \bibliography{references.bib}
+        \printbibliography
 \end{frame}
 
 
