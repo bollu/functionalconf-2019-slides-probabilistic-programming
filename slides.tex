@@ -191,15 +191,30 @@ landscape = samples 1000 learn
 
 
 \begin{frame}[fragile]{Program optimisation}
-    \begin{itemize}
-        \item A hypothetical stack-based machine (eg. JVM bytecode!)
-        \item Intructions are \texttt{Push}, \texttt{Add}, \texttt{Dup}, \texttt{Sub}
-        \item Want to automatically discover optimisations
-        \item Neural nets do not work - no gradient!
-    \end{itemize}
+\begin{itemize}
+\item A hypothetical stack-based machine (eg. JVM bytecode!)
+\item Instructions are \texttt{Push}, \texttt{Add}, \texttt{Dup}, \texttt{Sub}
+
+\begin{ascii}
+f(x) = x*2
+Program(f) = [Push 2; Mul]
+[BOT x] -Push 2-> [BOT x; 2] -Mul-> [BOT x*2]
+\end{ascii}
+\pause
+\item Want to automatically discover optimisations
+\begin{ascii}
+f(x) = x*2 = x+x
+Program(f) = [Dup; Add]
+[BOT x] -Dup-> [BOT x; x] -Add-> [BOT x+x]
+\end{ascii}
+Faster (addition is faster than multiplication)
+\pause
+\item Neural nets do not work - no gradient $\frac{\partial loss}{\partial program}$
+\end{itemize}
 \end{frame}
 
-\begin{frame}[fragile]{Program optimisation Pseudocode}
+\begin{frame}[fragile]{Program optimisation Pseudocode (Random)}
+Key idea: Randomly change the initial program and pick the best.
 \begin{columns}
 \column{\linewidth}
 {\scriptsize \footnotesize
@@ -256,7 +271,7 @@ equivRandomProgram' p = do
 \end{columns}
 \end{frame}
 
-\begin{frame}[fragile]{Use case: Transformations discovered by \texttt{STOKE}}
+\begin{frame}[fragile]{Transformations discovered by \texttt{STOKE}}
 \begin{columns}
 \column{\linewidth}
 {\scriptsize
@@ -381,7 +396,7 @@ sampleUnweighted g (Score f mx) =
     \includegraphics[height=280px]{res/uniform-PDF.pdf}
 \end{frame}
 
-\begin{frame}[fragile]{Semantics of Score: Custom probability!}
+\begin{frame}[fragile]{Semantics of Score: Custom ratios of probabilities!}
     \includegraphics[height=280px]{res/MCMC-1.pdf}
 \end{frame}
 
