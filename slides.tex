@@ -405,7 +405,7 @@ sampleUnweighted g (Score f mx) =
         \item Game plan: convert \hsmint{Rand a} to \hsmint{Rand (Trace a)}.
         \item \hsmint{Rand a} may contain \hsmint{Score}, \hsmint{Rand (Trace a)} will not.
         \item \hsmint{Rand (Trace a)} will have extra information to make \hsmint{Score} work.
-        \item Can use \hsmint{sampleUnweighted} on \hsmint{Rand (Trace a)}. It will respect \hsmint{Score}.
+        \item Can use \hsmint{sampleUnweighted} on \hsmint{Rand (Trace a)}. It will respect \hsmint{Score}, but not use \hsmint{Score}
 \end{itemize}
 \end{frame}
 
