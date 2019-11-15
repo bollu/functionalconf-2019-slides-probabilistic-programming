@@ -344,14 +344,23 @@ best = maximumBy (\a b -> compare (fst a) (fst b))
 data Rand x where
     Ret :: x -> Rand x
     SampleUniform01 :: (Double -> Rand x) -> Rand x
-    Score :: Double -> Rand x -> Rand x
-
+    Score :: Float -> Rand x -> Rand x
 
 instance Functor Rand
 instance Applicative Rand
 instance Monad Rand
 \end{code}
 (\hsmint{Rand} is a free monad)
+\begin{code}
+return :: x -> Rand x
+return = Ret
+
+uniform01 :: Rand Float
+uniform01 = SampleUniform01 Ret
+
+score :: Float -> Rand ()
+score s = Score s (return ())
+\end{code}
 \end{frame}
 
 \begin{frame}[fragile]
@@ -406,9 +415,22 @@ data Trace a =
           tscore :: Double, -- ^ The total score
           trs :: [Double] -- ^ The random numbers used
         }
+\end{code}
+}
+\end{columns}
+\end{frame}
 
+
+\begin{frame}[fragile]{Introspection of a Free monad}
+\begin{columns}
+\column{\linewidth}
+%\column{0.5\linewidth}
+%\column{0.5\linewidth}
+{\scriptsize
+\begin{code}
 -- | Trace a random computation (remove Score)
-traceR :: Rand x -> Rand (Trace x)
+traceR :: Rand x  -- ^ Original computation
+  -> Rand (Trace x) -- ^ Traced computation
 traceR (Ret x) = Ret (Trace x 1.0 [])
 traceR (SampleUniform01 mx) = do
   r <- sample01
@@ -417,6 +439,21 @@ traceR (SampleUniform01 mx) = do
 traceR (Score s mx) = do -- ^ No score in the RHS
   trx <- traceR $ mx
   return $ trx { tscore = tscore*s}
+\end{code}
+}
+\pause
+{\scriptsize
+\begin{code}
+-- | Send a particular sequence of randomness
+feedRandomness :: [Float] -- ^ Randomness to use
+  -> Rand a -- ^ Original computation
+  -> Rand a -- ^ Fixed computation
+feedRandomness _ (Ret x) = Ret x
+feedRandomness 
+  (r:rs) (SampleUniform01 f) = 
+    feedRandomness rs (f r)
+feedRandomness rs (Score s plx) = 
+  Score s $ injectRandomness rs plx
 \end{code}
 }
 \end{columns}
@@ -465,6 +502,9 @@ perturbRandomness rands = do
 \end{columns}
 \end{frame}
 
+
+
+
 \begin{frame}[fragile]{Odds and Ends}
 \begin{columns}
 \column{\linewidth}
@@ -509,7 +549,7 @@ findNonZeroTrace tracedR = do
 \begin{frame}[fragile]{Takeaways}
     \begin{itemize}
         \item Probablistic Programming is a powerful model of computation.
-        \item Free monads allow for introspection.
+        \item Free monads is essential: allows for introspection.
         \item Implementation is deceptively simple (hopefully!)
     \end{itemize}
 \end{frame}
